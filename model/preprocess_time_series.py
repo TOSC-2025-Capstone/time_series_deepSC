@@ -15,18 +15,6 @@ def is_valid_csv(fpath, expected_columns):
     except:
         return False
 
-def load_pt_dataset(pt_path, batch_size):
-    data = torch.load(pt_path)
-    print(f"Loaded {data.tensors[0].shape[0]} samples from {pt_path}")
-    return torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=False)
-
-def sliding_window_sequences(data, window_size=128, stride=64):
-    sequences = []
-    for start in range(0, len(data) - window_size + 1, stride):
-        window = data[start:start + window_size]
-        sequences.append(window)
-    return np.stack(sequences)  # [N, T, D]
-
 def load_all_valid_csv_tensors(folder_path, feature_cols, batch_size=8, save_split_path=None, split_ratio=0.8, window_size=128, stride=64):
     files = sorted([f for f in os.listdir(folder_path) if f.endswith('.csv')])
     total_files = len(files)
@@ -109,28 +97,7 @@ def verify_scaling(original_data, scaled_data, restored_data, feature_names):
         print(f"스케일링 범위: {scaled_data[:, i].min():.3f} ~ {scaled_data[:, i].max():.3f}")
         print(f"복원 범위: {restored_data[:, i].min():.3f} ~ {restored_data[:, i].max():.3f}")
         print(f"MSE: {np.mean((original_data[:, i] - restored_data[:, i])**2):.6f}")
-
-def preprocess_battery_data(data):
-    scaled_data = np.zeros_like(data)
-    scalers = []
-    
-    for i in range(data.shape[1]):
-        scaler = MinMaxScaler()
-        scaled_data[:, i] = scaler.fit_transform(data[:, i].reshape(-1, 1)).ravel()
-        scalers.append(scaler)
-    
-    return scaled_data, scalers
-
-def restore_battery_data(scaled_data, scalers):
-    restored_data = np.zeros_like(scaled_data)
-    
-    for i in range(scaled_data.shape[1]):
-        restored_data[:, i] = scalers[i].inverse_transform(
-            scaled_data[:, i].reshape(-1, 1)
-        ).ravel()
-    
-    return restored_data
-
+        
 if __name__ == '__main__':
     feature_cols = [
         'Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time'
@@ -141,5 +108,7 @@ if __name__ == '__main__':
         feature_cols=feature_cols,
         batch_size=8,
         save_split_path="./model/preprocessed_data",
-        split_ratio=0.8
+        split_ratio=0.8,
+        window_size=256,
+        stride=128,
     )
