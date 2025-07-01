@@ -23,7 +23,7 @@ class LSTMCompressor(nn.Module):
             nn.Linear(hidden_dim * 2, hidden_dim),  # bidirectional이므로 *2
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim // 2)
+            nn.Linear(hidden_dim, hidden_dim)  # hidden_dim // 2에서 hidden_dim으로 변경
         )
         
     def forward(self, x):
@@ -68,6 +68,9 @@ class LSTMDecompressor(nn.Module):
         # 출력 레이어
         self.output_layer = nn.Linear(hidden_dim, output_dim)
         
+        # 시간별 가중치 레이어 추가
+        self.time_weights = nn.Parameter(torch.randn(seq_len, hidden_dim * 2))
+        
     def forward(self, compressed):
         # compressed shape: (batch, compressed_dim)
         batch_size = compressed.size(0)
@@ -75,8 +78,8 @@ class LSTMDecompressor(nn.Module):
         # 압축된 벡터를 확장
         expanded = self.expand(compressed)  # (batch, hidden_dim * 2)
         
-        # 시퀀스 길이만큼 반복하여 입력 시퀀스 생성
-        input_seq = expanded.unsqueeze(1).repeat(1, self.seq_len, 1)  # (batch, seq_len, hidden_dim * 2)
+        # 시간별로 다른 입력 시퀀스 생성 (단순 반복 대신)
+        input_seq = expanded.unsqueeze(1) + self.time_weights.unsqueeze(0)  # (batch, seq_len, hidden_dim * 2)
         
         # LSTM을 통한 시계열 생성
         lstm_out, _ = self.lstm(input_seq)
@@ -93,7 +96,7 @@ class LSTMDeepSC(nn.Module):
         self.input_dim = input_dim
         self.seq_len = seq_len
         self.hidden_dim = hidden_dim
-        self.compressed_dim = hidden_dim // 2
+        self.compressed_dim = hidden_dim  # hidden_dim // 2에서 hidden_dim으로 변경
         
         self.encoder = LSTMCompressor(input_dim, hidden_dim, num_layers, dropout)
         self.decoder = LSTMDecompressor(self.compressed_dim, hidden_dim, seq_len, input_dim, num_layers, dropout)
@@ -132,7 +135,7 @@ class GRUCompressor(nn.Module):
             nn.Linear(hidden_dim * 2, hidden_dim),
             nn.ReLU(),
             nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim // 2)
+            nn.Linear(hidden_dim, hidden_dim)  # hidden_dim // 2에서 hidden_dim으로 변경
         )
         
     def forward(self, x):
@@ -177,6 +180,9 @@ class GRUDecompressor(nn.Module):
         # 출력 레이어
         self.output_layer = nn.Linear(hidden_dim, output_dim)
         
+        # 시간별 가중치 레이어 추가
+        self.time_weights = nn.Parameter(torch.randn(seq_len, hidden_dim * 2))
+        
     def forward(self, compressed):
         # compressed shape: (batch, compressed_dim)
         batch_size = compressed.size(0)
@@ -184,8 +190,8 @@ class GRUDecompressor(nn.Module):
         # 압축된 벡터를 확장
         expanded = self.expand(compressed)  # (batch, hidden_dim * 2)
         
-        # 시퀀스 길이만큼 반복하여 입력 시퀀스 생성
-        input_seq = expanded.unsqueeze(1).repeat(1, self.seq_len, 1)  # (batch, seq_len, hidden_dim * 2)
+        # 시간별로 다른 입력 시퀀스 생성 (단순 반복 대신)
+        input_seq = expanded.unsqueeze(1) + self.time_weights.unsqueeze(0)  # (batch, seq_len, hidden_dim * 2)
         
         # GRU를 통한 시계열 생성
         gru_out, _ = self.gru(input_seq)
@@ -202,7 +208,7 @@ class GRUDeepSC(nn.Module):
         self.input_dim = input_dim
         self.seq_len = seq_len
         self.hidden_dim = hidden_dim
-        self.compressed_dim = hidden_dim // 2
+        self.compressed_dim = hidden_dim  # hidden_dim // 2에서 hidden_dim으로 변경
         
         self.encoder = GRUCompressor(input_dim, hidden_dim, num_layers, dropout)
         self.decoder = GRUDecompressor(self.compressed_dim, hidden_dim, seq_len, input_dim, num_layers, dropout)

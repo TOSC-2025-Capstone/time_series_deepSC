@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import pickle
 from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC
+import pdb
 
 def train_improved_model(model_type, num_epochs=100, batch_size=32, learning_rate=1e-3):
     """
@@ -48,6 +49,7 @@ def train_improved_model(model_type, num_epochs=100, batch_size=32, learning_rat
     
     input_dim = train_tensor.shape[2]  # 6 features
     window_size = train_tensor.shape[1]  # 128
+    pdb.set_trace()
     
     if model_type == "lstm":
         model = LSTMDeepSC(

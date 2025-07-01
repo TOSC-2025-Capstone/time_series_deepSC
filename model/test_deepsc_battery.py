@@ -24,7 +24,8 @@ def create_model(model_type, input_dim, window_size, device):
             dff=512,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/250621/deepsc_battery_epoch80.pth'
+        # checkpoint_path = 'checkpoints/250621/deepsc_battery_epoch80.pth'
+        checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch100.pth'
         
     elif model_type == "lstm":
         # LSTM 기반 모델
@@ -90,6 +91,7 @@ def test_deepsc_battery(model_type="transformer"):
         
         # 학습된 파라미터 불러오기 (파일이 존재하는 경우에만)
         if os.path.exists(checkpoint_path):
+            print(f"checkpoint_path: {checkpoint_path}")
             model.load_state_dict(torch.load(checkpoint_path, map_location=device))
             print(f"{model_type.upper()} 모델 초기화 및 파라미터 로드 성공: {checkpoint_path}")
         else:

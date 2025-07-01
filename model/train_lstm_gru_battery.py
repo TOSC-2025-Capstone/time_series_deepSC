@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import pickle
 from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC
+import pdb
 
 def train_model(model_type, num_epochs=80, batch_size=32, learning_rate=1e-5):
     """
@@ -218,7 +219,8 @@ def test_trained_model(model_type):
         ).to(device)
     
     # 최신 체크포인트 찾기
-    checkpoint_dir = f'checkpoints/250621'
+    # checkpoint_dir = f'checkpoints/250621'
+    checkpoint_dir = f'checkpoints/lstm_deepsc_battery'
     checkpoint_files = [f for f in os.listdir(checkpoint_dir) if f.startswith(f'{model_type}_deepsc_battery_epoch')]
     if checkpoint_files:
         latest_checkpoint = max(checkpoint_files, key=lambda x: int(x.split('epoch')[1].split('.')[0]))
@@ -275,6 +277,7 @@ def reconstruct_and_compare_csv(model_type):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     input_dim = test_tensor.shape[2]
     window_size = test_tensor.shape[1]
+    pdb.set_trace()
     
     if model_type == "lstm":
         model = LSTMDeepSC(
@@ -316,7 +319,7 @@ def reconstruct_and_compare_csv(model_type):
         df = pd.read_csv(os.path.join('data_handling/merged', fname))
         battery_lengths[fname] = len(df)
 
-    # 4. 배터리별로 빈 시계열 배열 준비 (복원값, 카운트)
+    # 4. 배터리별로 계산한 길이에 맞추어서 빈 시계열 배열 준비 (복원값, 카운트)
     reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim)) for fname in battery_files}
     counts = {fname: np.zeros(battery_lengths[fname]) for fname in battery_files}
 
