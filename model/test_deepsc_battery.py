@@ -24,8 +24,8 @@ def create_model(model_type, input_dim, window_size, device):
             dff=512,
             dropout=0.1
         ).to(device)
-        # checkpoint_path = 'checkpoints/250621/deepsc_battery_epoch80.pth'
-        checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch100.pth'
+        checkpoint_path = 'checkpoints/250621/deepsc_battery_epoch80.pth'
+        # checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch100.pth'
         
     elif model_type == "lstm":
         # LSTM 기반 모델
@@ -36,7 +36,7 @@ def create_model(model_type, input_dim, window_size, device):
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/250621/lstm_deepsc_battery_epoch80.pth'
+        checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch80.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
@@ -47,7 +47,7 @@ def create_model(model_type, input_dim, window_size, device):
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/250621/gru_deepsc_battery_epoch80.pth'
+        checkpoint_path = 'checkpoints/gru_deepsc_battery/gru_deepsc_battery_epoch80.pth'
         
     else:
         raise ValueError(f"지원하지 않는 모델 타입: {model_type}")
@@ -457,53 +457,40 @@ def compare_all_models():
 if __name__ == "__main__":
     # 사용자가 선택할 수 있도록 메뉴 제공
     print("DeepSC 배터리 데이터 테스트 및 복원 도구")
-    print("모델 선택:")
-    print("1. Transformer 기반 DeepSC")
-    print("2. LSTM 기반 DeepSC")
-    print("3. GRU 기반 DeepSC")
-    print("4. 모든 모델 비교")
     print("\n기능 선택:")
-    print("5. 개별 window 압축-복원 테스트")
-    print("6. 전체 배터리 시계열 복원")
-    print("7. 원본 vs 복원 데이터 비교")
-    print("8. 모든 기능 실행")
+    print("1. 모든 모델 비교")
+    print("2. 개별 window 압축-복원 테스트")
+    print("3. 전체 배터리 시계열 복원")
+    print("4. 원본 vs 복원 데이터 비교")
+    print("5. 모든 기능 실행")
     
     choice = input("원하는 옵션을 선택하세요 (1-8): ").strip()
     
     if choice == "1":
-        model_type = "transformer"
-        print(f"\n{model_type.upper()} 모델을 선택했습니다.")
-    elif choice == "2":
-        model_type = "lstm"
-        print(f"\n{model_type.upper()} 모델을 선택했습니다.")
-    elif choice == "3":
-        model_type = "gru"
-        print(f"\n{model_type.upper()} 모델을 선택했습니다.")
-    elif choice == "4":
         compare_all_models()
         exit()
-    elif choice == "5":
+    elif choice == "2":
         model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
         if model_choice in ["transformer", "lstm", "gru"]:
             test_deepsc_battery(model_choice)
         else:
             print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
             test_deepsc_battery("transformer")
-    elif choice == "6":
+    elif choice == "3":
         model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
         if model_choice in ["transformer", "lstm", "gru"]:
             reconstruct_battery_series(model_choice)
         else:
             print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
             reconstruct_battery_series("transformer")
-    elif choice == "7":
+    elif choice == "4":
         model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
         if model_choice in ["transformer", "lstm", "gru"]:
             compare_original_reconstructed(model_choice)
         else:
             print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
             compare_original_reconstructed("transformer")
-    elif choice == "8":
+    elif choice == "5":
         model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
         if model_choice in ["transformer", "lstm", "gru"]:
             test_deepsc_battery(model_choice)

@@ -78,7 +78,7 @@ def train_deepsc_battery(
         scheduler.step(avg_val_loss)
 
         # (선택) 모델 저장
-        torch.save(model.state_dict(), f"checkpoints/250621/deepsc_battery_epoch{epoch+1}.pth")
+        torch.save(model.state_dict(), f"checkpoints/250702/deepsc_battery_epoch{epoch+1}.pth")
 
     print("학습 완료!")
 

@@ -79,7 +79,8 @@ if __name__ == '__main__':
     # 설정
     INPUT_FOLDER = "merged"
     OUTPUT_FOLDER = "deepsc_dataset"
-    SELECTED_BATTERIES = [5, 6, 7, 18, 33, 34, 36, 38, 39, 40]
+    SELECTED_BATTERIES = [5, 6, 7, 18, 33, 34, 36, 38, 39, 40] # 기본 학습 phase 데이터셋
+    SELECTED_BATTERIES_phase_2 = [5, 6, 7, 18, 33, 34, 36, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50] # 모든 배터리 데이터셋
     FEATURE_COLS = [
         'Voltage_measured', 'Current_measured', 'Temperature_measured',
         'Current_load', 'Voltage_load', 'Time'
