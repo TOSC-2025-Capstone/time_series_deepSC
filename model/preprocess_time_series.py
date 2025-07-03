@@ -109,6 +109,6 @@ if __name__ == '__main__':
         batch_size=8,
         save_split_path="./model/preprocessed_data",
         split_ratio=0.8,
-        window_size=256,
-        stride=128,
+        window_size=128,
+        stride=64,
     )

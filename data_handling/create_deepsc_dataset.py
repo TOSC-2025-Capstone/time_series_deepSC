@@ -91,5 +91,8 @@ if __name__ == '__main__':
         input_folder=INPUT_FOLDER,
         output_folder=OUTPUT_FOLDER,
         selected_batteries=SELECTED_BATTERIES,
-        feature_cols=FEATURE_COLS
+        feature_cols=FEATURE_COLS,
+        window_size=128,
+        stride=64,
+        split_ratio=0.8
     ) 

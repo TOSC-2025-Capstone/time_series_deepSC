@@ -58,18 +58,6 @@ cd model
 python test_deepsc_battery.py
 ```
 
-**모델 선택:**
-- 1: Transformer 기반 DeepSC
-- 2: LSTM 기반 DeepSC
-- 3: GRU 기반 DeepSC
-- 4: 모든 모델 비교
-
-**기능 선택:**
-- 5: 개별 window 압축-복원 테스트
-- 6: 전체 배터리 시계열 복원
-- 7: 원본 vs 복원 데이터 비교
-- 8: 모든 기능 실행
-
 ## 📊 모델 비교
 
 ### 성능 지표

@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import joblib
 from models.transceiver import DeepSC
 from torch.optim.lr_scheduler import ReduceLROnPlateau
+import pdb
 
 def train_deepsc_battery(
     train_pt='model/preprocessed_data/train_data.pt',
@@ -32,6 +33,7 @@ def train_deepsc_battery(
     # 모델 초기화
     input_dim = train_tensor.shape[2]
     window_size = train_tensor.shape[1]
+    pdb.set_trace()
     model = DeepSC(
         num_layers=4,
         input_dim=input_dim,
@@ -43,7 +45,8 @@ def train_deepsc_battery(
     ).to(device)
 
     # 손실함수 및 옵티마이저
-    criterion = nn.MSELoss()
+    # criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
 
@@ -78,7 +81,7 @@ def train_deepsc_battery(
         scheduler.step(avg_val_loss)
 
         # (선택) 모델 저장
-        torch.save(model.state_dict(), f"checkpoints/250702/deepsc_battery_epoch{epoch+1}.pth")
+        torch.save(model.state_dict(), f"checkpoints/250703/deepsc_battery_epoch{epoch+1}.pth")
 
     print("학습 완료!")
 

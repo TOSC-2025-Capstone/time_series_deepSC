@@ -12,7 +12,7 @@ import pickle
 from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC
 import pdb
 
-def train_improved_model(model_type, num_epochs=100, batch_size=32, learning_rate=1e-3):
+def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate=1e-5):
     """
     개선된 LSTM 또는 GRU 모델을 학습하는 함수
     

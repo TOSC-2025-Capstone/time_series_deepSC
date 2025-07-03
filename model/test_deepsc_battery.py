@@ -13,7 +13,7 @@ from collections import defaultdict
 
 def create_model(model_type, input_dim, window_size, device):
     """모델 타입에 따라 적절한 모델을 생성하는 함수"""
-    if model_type == "transformer":
+    if model_type == "deepsc":
         # 기존 Transformer 기반 DeepSC 모델
         model = DeepSC(
             num_layers=4,
@@ -24,7 +24,7 @@ def create_model(model_type, input_dim, window_size, device):
             dff=512,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/250621/deepsc_battery_epoch80.pth'
+        checkpoint_path = 'checkpoints/250703/deepsc_battery_epoch80.pth'
         # checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch100.pth'
         
     elif model_type == "lstm":
@@ -36,7 +36,7 @@ def create_model(model_type, input_dim, window_size, device):
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch80.pth'
+        checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch20.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
@@ -54,7 +54,7 @@ def create_model(model_type, input_dim, window_size, device):
     
     return model, checkpoint_path
 
-def test_deepsc_battery(model_type="transformer"):
+def test_deepsc_battery(model_type="deepsc"):
     print(f"=== {model_type.upper()} 기반 배터리 데이터 압축-복원 검증 ===")
     
     # 1. 데이터 로드
@@ -113,7 +113,7 @@ def test_deepsc_battery(model_type="transformer"):
     total_compression_ratio = 0
     
     # 복원된 시계열을 csv로 저장할 폴더
-    save_dir = f'reconstructed_{model_type}'
+    save_dir = f'reconstructed_{"deepsc"}'
     os.makedirs(save_dir, exist_ok=True)
     feature_cols = ['Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time']
 
@@ -133,7 +133,7 @@ def test_deepsc_battery(model_type="transformer"):
                 print(f"Sample {i}: Output shape: {output.shape}")
                 
                 # 압축률 계산
-                if model_type == "transformer":
+                if model_type == "deepsc":
                     # Transformer 모델의 경우 기존 방식 사용
                     encoded = model.encoder(input_data, src_mask=None)
                     channel_encoded = model.channel_encoder(encoded)
@@ -264,7 +264,7 @@ def test_deepsc_battery(model_type="transformer"):
     else:
         print("낮은 압축 효율성: 압축률이 낮습니다.")
 
-def reconstruct_battery_series(model_type="transformer"):
+def reconstruct_battery_series(model_type="deepsc"):
     """
     전체 배터리 시계열을 복원하는 함수 (recon.py에서 가져온 기능)
     """
@@ -352,12 +352,29 @@ def reconstruct_battery_series(model_type="transformer"):
             plt.savefig(fig_path, dpi=200)
             plt.close()
             print(f"비교 그래프 저장: {fig_path}")
+            
+            # Residual(오차) 시계열 플롯 추가
+            plt.figure(figsize=(15, 10))
+            for i, col in enumerate(feature_cols):
+                plt.subplot(2, 3, i+1)
+                residual = df_orig[col] - df_recon[col]
+                plt.plot(residual, label='Residual', color='orange', alpha=0.8)
+                plt.title(f'Residual: {col}')
+                plt.axhline(0, color='gray', linestyle='--', linewidth=1)
+                plt.legend()
+                plt.grid(True)
+            plt.suptitle(f'{model_type.upper()} Residuals: {fname}')
+            plt.tight_layout(rect=[0, 0, 1, 0.96])
+            residual_fig_path = os.path.join(save_dir, f'{base}_residual.png')
+            plt.savefig(residual_fig_path, dpi=200)
+            plt.close()
+            print(f"Residual 그래프 저장: {residual_fig_path}")
 
     # 6. 카운트 배열 확인
     for fname in battery_files:
         print(f"{fname} counts unique: {np.unique(counts[fname])}")
 
-def compare_original_reconstructed(model_type="transformer"):
+def compare_original_reconstructed(model_type="deepsc"):
     """
     원본 데이터와 복원 데이터를 비교하는 함수
     """
@@ -395,7 +412,7 @@ def compare_all_models():
     """
     print("=== 모든 모델 성능 비교 ===")
     
-    models = ["transformer", "lstm", "gru"]
+    models = ["deepsc", "lstm", "gru"]
     results = {}
     
     for model_type in models:
@@ -420,7 +437,7 @@ def compare_all_models():
                 output = model(input_data)
                 mse = nn.MSELoss()(output, input_data).item()
                 
-                if model_type == "transformer":
+                if model_type == "deepsc":
                     encoded = model.encoder(input_data, src_mask=None)
                     channel_encoded = model.channel_encoder(encoded)
                     compressed_size = channel_encoded.numel()
@@ -462,45 +479,45 @@ if __name__ == "__main__":
     print("2. 개별 window 압축-복원 테스트")
     print("3. 전체 배터리 시계열 복원")
     print("4. 원본 vs 복원 데이터 비교")
-    print("5. 모든 기능 실행")
+    print("5. 1개 모델의 2,3,4 모든 기능 실행")
     
-    choice = input("원하는 옵션을 선택하세요 (1-8): ").strip()
+    choice = input("원하는 옵션을 선택하세요 (1-5): ").strip()
     
     if choice == "1":
         compare_all_models()
         exit()
     elif choice == "2":
-        model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
-        if model_choice in ["transformer", "lstm", "gru"]:
+        model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
+        if model_choice in ["deepsc", "lstm", "gru"]:
             test_deepsc_battery(model_choice)
         else:
-            print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
-            test_deepsc_battery("transformer")
+            print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
+            test_deepsc_battery("deepsc")
     elif choice == "3":
-        model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
-        if model_choice in ["transformer", "lstm", "gru"]:
+        model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
+        if model_choice in ["deepsc", "lstm", "gru"]:
             reconstruct_battery_series(model_choice)
         else:
-            print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
-            reconstruct_battery_series("transformer")
+            print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
+            reconstruct_battery_series("deepsc")
     elif choice == "4":
-        model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
-        if model_choice in ["transformer", "lstm", "gru"]:
+        model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
+        if model_choice in ["deepsc", "lstm", "gru"]:
             compare_original_reconstructed(model_choice)
         else:
-            print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
-            compare_original_reconstructed("transformer")
+            print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
+            compare_original_reconstructed("deepsc")
     elif choice == "5":
-        model_choice = input("모델을 선택하세요 (transformer/lstm/gru): ").strip().lower()
-        if model_choice in ["transformer", "lstm", "gru"]:
+        model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
+        if model_choice in ["deepsc", "lstm", "gru"]:
             test_deepsc_battery(model_choice)
             reconstruct_battery_series(model_choice)
             compare_original_reconstructed(model_choice)
         else:
-            print("잘못된 모델 선택입니다. 기본값으로 Transformer를 사용합니다.")
-            test_deepsc_battery("transformer")
-            reconstruct_battery_series("transformer")
-            compare_original_reconstructed("transformer")
+            print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
+            test_deepsc_battery("deepsc")
+            reconstruct_battery_series("deepsc")
+            compare_original_reconstructed("deepsc")
     else:
-        print("잘못된 선택입니다. 기본값으로 Transformer 모델의 개별 window 테스트를 실행합니다.")
-        test_deepsc_battery("transformer") 
+        print("잘못된 선택입니다. 기본값으로 deepsc 모델의 개별 window 테스트를 실행합니다.")
+        test_deepsc_battery("deepsc") 
