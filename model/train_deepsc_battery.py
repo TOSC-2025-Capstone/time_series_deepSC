@@ -11,6 +11,8 @@ def train_deepsc_battery(
     train_pt='model/preprocessed_data/train_data.pt',
     test_pt='model/preprocessed_data/test_data.pt',
     scaler_path='model/preprocessed_data/scaler.pkl',
+    model_save_path='checkpoints/firstcase/MAE/deepsc_battery_epoch',
+    # model_save_path='checkpoints/firstcase/MSE/deepsc_battery_epoch',
     num_epochs=80,
     batch_size=32,
     lr=1e-5,
@@ -47,8 +49,15 @@ def train_deepsc_battery(
     # 손실함수 및 옵티마이저
     # criterion = nn.MSELoss()
     criterion = nn.L1Loss()
+    # criterion = nn.HuberLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+
+    # val loss initial value 정의
+    best_val_loss = 1
+
+    # # early stopping
+    # best_epoch_idx = 0
 
     # 학습 루프
     for epoch in range(num_epochs):
@@ -80,8 +89,18 @@ def train_deepsc_battery(
         # 스케줄러 step (val loss 기준)
         scheduler.step(avg_val_loss)
 
-        # (선택) 모델 저장
-        torch.save(model.state_dict(), f"checkpoints/250703/deepsc_battery_epoch{epoch+1}.pth")
+        # val loss 개선 시 모델 저장
+        if(avg_val_loss < best_val_loss):
+            torch.save(model.state_dict(), model_save_path+f"{epoch+1}.pth")
+            best_val_loss = avg_val_loss
+            best_epoch_idx = epoch
+            print(f"[Best Val Epoch {epoch+1}/{num_epochs}] Best Val Loss: {best_val_loss}")  
+        
+        # # early stopping - patience = 10
+        # if(epoch > best_epoch_idx+10):
+        #     print("조기 중단에 의한 학습 완료!")
+        #     return
+        
 
     print("학습 완료!")
 

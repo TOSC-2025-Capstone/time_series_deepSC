@@ -11,6 +11,8 @@ import os
 import pickle
 from collections import defaultdict
 
+loss_type = 'MAE'
+
 def create_model(model_type, input_dim, window_size, device):
     """모델 타입에 따라 적절한 모델을 생성하는 함수"""
     if model_type == "deepsc":
@@ -24,8 +26,7 @@ def create_model(model_type, input_dim, window_size, device):
             dff=512,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/250703/deepsc_battery_epoch80.pth'
-        # checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch100.pth'
+        checkpoint_path = 'checkpoints/firstcase/MAE/deepsc_battery_epoch79.pth'
         
     elif model_type == "lstm":
         # LSTM 기반 모델
@@ -270,6 +271,8 @@ def reconstruct_battery_series(model_type="deepsc"):
     """
     print(f"=== {model_type.upper()} 기반 전체 배터리 시계열 복원 시작 ===")
     
+    save_dir = f'reconstructed_{model_type}_{loss_type}'
+
     # 데이터 및 메타 정보 로드
     test_data = torch.load('model/preprocessed_data/test_data.pt')
     test_tensor = test_data.tensors[0]
@@ -326,7 +329,6 @@ def reconstruct_battery_series(model_type="deepsc"):
         reconstructed[fname][mask] /= counts[fname][mask][:, None]
 
      # 5. 배터리별로 csv 저장 및 비교 시각화
-    save_dir = f'reconstructed_{model_type}'
     os.makedirs(save_dir, exist_ok=True)
     for fname in battery_files:
         base = os.path.splitext(fname)[0]

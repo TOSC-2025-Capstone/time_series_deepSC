@@ -4,6 +4,8 @@ data_handling/deepsc_dataset
 data_handling/extra_infos
 data_handling/images
 reconstructed
-reconstructed_deepsc
+reconstructed_deepsc_huber
+reconstructed_deepsc_MAE
+reconstructed_deepsc_MSE
 reconstructed_gru
 reconstructed_lstm

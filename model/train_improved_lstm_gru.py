@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import os
 import pandas as pd
 import pickle
-from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC
+from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC, Seq2SeqAttention
 import pdb
 
 def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate=1e-5):
@@ -49,7 +49,6 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     
     input_dim = train_tensor.shape[2]  # 6 features
     window_size = train_tensor.shape[1]  # 128
-    pdb.set_trace()
     
     if model_type == "lstm":
         model = LSTMDeepSC(
@@ -67,12 +66,23 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
             num_layers=2,
             dropout=0.1
         ).to(device)
-    
+    elif model_type == "seq2seq": # 테스트 중 
+        model = Seq2SeqAttention(
+            input_dim=input_dim,
+            hidden_dim=128,
+            seq_len=window_size,
+            output_dim=input_dim,
+            num_layers=2,
+            dropout=0.1
+        ).to(device)
+
     # 4. 손실 함수와 옵티마이저 설정
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-5)
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.7, patience=5, verbose=True)
     
+    pdb.set_trace()
+
     # 5. 체크포인트 저장 디렉토리 생성
     checkpoint_dir = f'checkpoints/{model_type}_deepsc_battery'
     os.makedirs(checkpoint_dir, exist_ok=True)
@@ -194,13 +204,16 @@ if __name__ == "__main__":
     print("개선된 LSTM/GRU 배터리 데이터 학습 도구")
     print("1. 개선된 LSTM 모델 학습")
     print("2. 개선된 GRU 모델 학습")
+    print("3. Seq2Seq Attention 모델 학습")
     
-    choice = input("원하는 기능을 선택하세요 (1-2): ").strip()
+    choice = input("원하는 기능을 선택하세요 (1-3): ").strip()
     
     if choice == "1":
         train_improved_model("lstm")
     elif choice == "2":
         train_improved_model("gru")
+    elif choice == "3":
+        train_improved_model("seq2seq")
     else:
         print("잘못된 선택입니다. 기본값으로 개선된 LSTM 모델 학습을 실행합니다.")
         train_improved_model("lstm") 

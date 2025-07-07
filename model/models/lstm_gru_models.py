@@ -224,4 +224,40 @@ class GRUDeepSC(nn.Module):
         """압축률 계산"""
         original_size = self.input_dim * self.seq_len
         compressed_size = self.compressed_dim
-        return compressed_size / original_size 
+        return compressed_size / original_size
+
+class Seq2SeqAttention(nn.Module):
+    def __init__(self, input_dim, hidden_dim, seq_len, output_dim, num_layers=2, dropout=0.1):
+        super(Seq2SeqAttention, self).__init__()
+        self.input_dim = input_dim
+        self.seq_len = seq_len
+        self.output_dim = output_dim
+        self.num_layers = num_layers
+        self.hidden_dim = hidden_dim
+        # self.compressed_dim = hidden_dim//2 
+        
+        self.encoder = LSTMCompressor(input_dim, hidden_dim, num_layers, dropout)
+        self.decoder = LSTMDecompressor(hidden_dim, hidden_dim, seq_len, output_dim, num_layers, dropout)
+        self.attn = nn.MultiheadAttention(embed_dim=hidden_dim, num_heads=4, batch_first=True)
+        
+    def forward(self, x):
+        encoder_outputs = self.encoder(x)  # (batch, seq_len, hidden_dim)
+        
+        batch_size = x.size(0)
+        seq_len = self.seq_len
+        embed_dim = encoder_outputs.size(-1)  # 보통 hidden_dim*2
+
+        # 제로 벡터로 디코더 입력 생성
+        decoder_input = torch.zeros(batch_size, seq_len, embed_dim, device=x.device)
+
+        # Attention 적용
+        attn_output = self.attn(decoder_input, encoder_outputs, encoder_outputs)
+        # 디코더에 attn_output 입력
+        output = self.decoder(attn_output)
+        return output 
+
+    def get_compression_ratio(self):
+        """압축률 계산"""
+        original_size = self.input_dim * self.seq_len
+        compressed_size = self.hidden_dim
+        return compressed_size / original_size
