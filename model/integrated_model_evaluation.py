@@ -11,7 +11,7 @@ warnings.filterwarnings('ignore')
 plt.rcParams['font.family'] ='Malgun Gothic'
 plt.rcParams['axes.unicode_minus'] =False
 
-save_dir = "./analysis/250707_B0047/"
+save_dir = "./analysis/250708_B0047/"
 
 def calculate_integrated_residuals():
     """
@@ -20,9 +20,9 @@ def calculate_integrated_residuals():
     
     # 폴더 경로들
     folders = {
-        'Huber': 'reconstructed_deepsc_huber',
-        'MAE': 'reconstructed_deepsc_MAE', 
-        'MSE': 'reconstructed_deepsc_MSE'
+        'Huber': 'reconstructed_no_channel_deepsc_Huber',
+        'MAE': 'reconstructed_no_channel_deepsc_MAE', 
+        'MSE': 'reconstructed_no_channel_deepsc_MSE'
     }
     
     # 원본 데이터 경로

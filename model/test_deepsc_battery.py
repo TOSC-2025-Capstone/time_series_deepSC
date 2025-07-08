@@ -11,7 +11,9 @@ import os
 import pickle
 from collections import defaultdict
 
-loss_type = 'MAE'
+loss_type = 'MSE' # 3 loss 테스트 중 제일 좋았음
+model_type = 'deepsc'
+channel_type = 'no_channel'
 
 def create_model(model_type, input_dim, window_size, device):
     """모델 타입에 따라 적절한 모델을 생성하는 함수"""
@@ -24,9 +26,10 @@ def create_model(model_type, input_dim, window_size, device):
             d_model=128,
             num_heads=8,
             dff=512,
-            dropout=0.1
+            dropout=0.1,
+            compressed_len=64
         ).to(device)
-        checkpoint_path = 'checkpoints/firstcase/MAE/deepsc_battery_epoch79.pth'
+        checkpoint_path = f'checkpoints/firstcase/{loss_type}/deepsc_battery_epoch79.pth'
         
     elif model_type == "lstm":
         # LSTM 기반 모델
@@ -271,7 +274,8 @@ def reconstruct_battery_series(model_type="deepsc"):
     """
     print(f"=== {model_type.upper()} 기반 전체 배터리 시계열 복원 시작 ===")
     
-    save_dir = f'reconstructed_{model_type}_{loss_type}'
+    save_dir = f'reconstructed_{channel_type}_{model_type}_{loss_type}'
+    # save_dir = f'reconstructed_{model_type}_{loss_type}'
 
     # 데이터 및 메타 정보 로드
     test_data = torch.load('model/preprocessed_data/test_data.pt')

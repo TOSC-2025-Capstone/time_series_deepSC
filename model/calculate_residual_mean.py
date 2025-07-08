@@ -8,7 +8,7 @@ import os
 plt.rcParams['font.family'] ='Malgun Gothic'
 plt.rcParams['axes.unicode_minus'] =False
 
-save_dir = "./analysis/250707_B0047/" 
+save_dir = "./analysis/250708_B0047/" 
 
 def calculate_residual_mean():
     """
@@ -17,7 +17,7 @@ def calculate_residual_mean():
     
     # 폴더 경로들
     folders = [
-        'reconstructed_deepsc_huber',
+        'reconstructed_deepsc_Huber',
         'reconstructed_deepsc_MAE', 
         'reconstructed_deepsc_MSE'
     ]

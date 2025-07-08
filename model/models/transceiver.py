@@ -23,6 +23,7 @@ import torch.nn.functional as F
 from torch.autograd import Function
 import math
 import pdb
+from utils import Channels 
 
 
 class PositionalEncoding(nn.Module):
@@ -263,60 +264,85 @@ class ChannelDecoder(nn.Module):
 
         return output
         
+class TimeSeriesCompressor(nn.Module):
+    """
+    시계열 길이(seq_len)를 원하는 길이로 압축하는 모듈
+    """
+    def __init__(self, target_len):
+        super(TimeSeriesCompressor, self).__init__()
+        self.target_len = target_len
+        self.pool = nn.AdaptiveAvgPool1d(target_len)
+
+    def forward(self, x):
+        # x: (batch, seq_len, d_model)
+        x = x.permute(0, 2, 1)  # (batch, d_model, seq_len)
+        x = self.pool(x)         # (batch, d_model, target_len)
+        x = x.permute(0, 2, 1)  # (batch, target_len, d_model)
+        return x
+
 class DeepSC(nn.Module):
     def __init__(self, num_layers, input_dim, max_len, 
-                 d_model, num_heads, dff, dropout = 0.1):
+                 d_model, num_heads, dff, dropout = 0.1, compressed_len=None):
         super(DeepSC, self).__init__()
+        self.d_comp = 3
         
         self.encoder = Encoder(num_layers, input_dim, max_len, 
                                d_model, num_heads, dff, dropout)
+
+        # 시계열 길이 압축 모듈 (선택)
+        self.compressed_len = compressed_len
+        if compressed_len is not None:
+            self.time_compressor = TimeSeriesCompressor(compressed_len)
+        else:
+            self.time_compressor = None
+        
+        # pdb.set_trace()
         
         self.channel_encoder = nn.Sequential(nn.Linear(d_model, 256), 
                                              #nn.ELU(inplace=True),
                                              nn.ReLU(inplace=True),
-                                             nn.Linear(256, 16))
+                                             nn.Linear(256, self.d_comp))
 
+        self.channels = Channels()
 
-        self.channel_decoder = ChannelDecoder(16, d_model, 512)
+        self.channel_decoder = ChannelDecoder(self.d_comp, d_model, 512) # feature, output_dim, max_dim
         
         # 자연어 디코더 대신 시계열 출력 레이어 사용
         self.output_projection = nn.Linear(d_model, input_dim)
+
+        # 업샘플링 레이어 추가 (compressed_len → max_len)
+        self.upsample = nn.Upsample(size=max_len, mode='linear', align_corners=False)
         
     def forward(self, x, src_mask=None):
         # x: (batch_size, seq_len, input_dim) - 시계열 데이터
         
         # 1단계: 인코더
-        encoded = self.encoder(x, src_mask)
+        encoded = self.encoder(x, src_mask) # (batch, max_len, d_model)
         
-        # 2단계: 채널 인코더 (압축)
-        channel_encoded = self.channel_encoder(encoded)
+        # 2단계: sequence compress (downsampling)
+        compressed = self.time_compressor(encoded)  # (batch, target_len, d_model)
+
+        # 3단계: 채널 인코더 (압축)
+        channel_encoded = self.channel_encoder(compressed)
+
+        # 4단계 : 채널 상태 적용
+        # channel_syms = self.channels.AWGN(channel_encoded, 0.1)
+        # channel_syms = self.channels.Rayleigh(channel_encoded, 0.1)
+        # channel_syms = self.channels.Rician(channel_encoded, 0.1)
         
-        # 3단계: 채널 디코더 (복원)
+        # 5단계: 채널 디코더 (복원)
+        # channel_decoded = self.channel_decoder(channel_syms)
         channel_decoded = self.channel_decoder(channel_encoded)
         
-        # 4단계: 출력 투영 (원래 차원으로 복원)
+        # 6단계: 출력 투영 (원래 차원으로 복원)
         output = self.output_projection(channel_decoded)
         
+        # 7단계: upsampling (batch, compressed_len, input_dim) → (batch, max_len, input_dim)
+        output = output.permute(0, 2, 1)  # (batch, input_dim, compressed_len), (PyTorch의 Upsample은 (batch, channels, length) 형태를 기대하므로 형태 수정
+        output = self.upsample(output)     # (batch, input_dim, max_len)
+        output = output.permute(0, 2, 1)  # (batch, max_len, input_dim)
+
+        # pdb.set_trace()
+
         return output
-
-
-
-    
-        
-        
-        
-        
-        
-
-    
-
-    
-    
-    
-    
-    
-
-
-    
-
 

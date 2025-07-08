@@ -11,8 +11,8 @@ def train_deepsc_battery(
     train_pt='model/preprocessed_data/train_data.pt',
     test_pt='model/preprocessed_data/test_data.pt',
     scaler_path='model/preprocessed_data/scaler.pkl',
-    model_save_path='checkpoints/firstcase/MAE/deepsc_battery_epoch',
-    # model_save_path='checkpoints/firstcase/MSE/deepsc_battery_epoch',
+    # model_save_path='checkpoints/channel_case/Rician/deepsc_battery_epoch',
+    model_save_path='checkpoints/firstcase/MSE/deepsc_battery_epoch',
     num_epochs=80,
     batch_size=32,
     lr=1e-5,
@@ -35,7 +35,6 @@ def train_deepsc_battery(
     # 모델 초기화
     input_dim = train_tensor.shape[2]
     window_size = train_tensor.shape[1]
-    pdb.set_trace()
     model = DeepSC(
         num_layers=4,
         input_dim=input_dim,
@@ -43,15 +42,18 @@ def train_deepsc_battery(
         d_model=128,
         num_heads=8,
         dff=512,
-        dropout=0.1
+        dropout=0.1,
+        compressed_len=64
     ).to(device)
 
     # 손실함수 및 옵티마이저
-    # criterion = nn.MSELoss()
-    criterion = nn.L1Loss()
+    criterion = nn.MSELoss()
+    # criterion = nn.L1Loss()
     # criterion = nn.HuberLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
+
+    pdb.set_trace()
 
     # val loss initial value 정의
     best_val_loss = 1
@@ -100,8 +102,6 @@ def train_deepsc_battery(
         # if(epoch > best_epoch_idx+10):
         #     print("조기 중단에 의한 학습 완료!")
         #     return
-        
-
     print("학습 완료!")
 
 if __name__ == "__main__":
