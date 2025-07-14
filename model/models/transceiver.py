@@ -328,11 +328,11 @@ class DeepSC(nn.Module):
         # 4단계 : 채널 상태 적용
         # channel_syms = self.channels.AWGN(channel_encoded, 0.1)
         # channel_syms = self.channels.Rayleigh(channel_encoded, 0.1)
-        # channel_syms = self.channels.Rician(channel_encoded, 0.1)
+        channel_syms = self.channels.Rician(channel_encoded, 0.1)
         
         # 5단계: 채널 디코더 (복원)
-        # channel_decoded = self.channel_decoder(channel_syms)
-        channel_decoded = self.channel_decoder(channel_encoded)
+        channel_decoded = self.channel_decoder(channel_syms)
+        # channel_decoded = self.channel_decoder(channel_encoded)
         
         # 6단계: 출력 투영 (원래 차원으로 복원)
         output = self.output_projection(channel_decoded)

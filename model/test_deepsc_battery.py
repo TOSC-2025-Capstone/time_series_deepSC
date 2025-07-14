@@ -10,10 +10,11 @@ import pandas as pd
 import os
 import pickle
 from collections import defaultdict
+import pdb
 
 loss_type = 'MSE' # 3 loss 테스트 중 제일 좋았음
 model_type = 'deepsc'
-channel_type = 'no_channel'
+channel_type = 'Rician'
 
 def create_model(model_type, input_dim, window_size, device):
     """모델 타입에 따라 적절한 모델을 생성하는 함수"""
@@ -29,29 +30,34 @@ def create_model(model_type, input_dim, window_size, device):
             dropout=0.1,
             compressed_len=64
         ).to(device)
-        checkpoint_path = f'checkpoints/firstcase/{loss_type}/deepsc_battery_epoch79.pth'
+        # checkpoint_path = f'checkpoints/firstcase/{loss_type}/deepsc_battery_epoch79.pth'
+        checkpoint_path = f'checkpoints/channel_case/Rician/deepsc_battery_epoch42.pth'
         
     elif model_type == "lstm":
         # LSTM 기반 모델
         model = LSTMDeepSC(
             input_dim=input_dim,
+            target_len=64, 
+            target_features=3, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/lstm_deepsc_battery/lstm_deepsc_battery_epoch20.pth'
+        checkpoint_path = 'checkpoints/firstcase/MSE/lstm/lstm_deepsc_battery_epoch78.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
         model = GRUDeepSC(
             input_dim=input_dim,
+            target_len=64, 
+            target_features=3,
             seq_len=window_size,
             hidden_dim=128,
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/gru_deepsc_battery/gru_deepsc_battery_epoch80.pth'
+        checkpoint_path = 'checkpoints/firstcase/MSE/gru/gru_deepsc_battery_epoch80.pth'
         
     else:
         raise ValueError(f"지원하지 않는 모델 타입: {model_type}")
@@ -284,6 +290,7 @@ def reconstruct_battery_series(model_type="deepsc"):
     with open('model/preprocessed_data/window_meta.pkl', 'rb') as f:
         window_meta = pickle.load(f)
     train_data = torch.load('model/preprocessed_data/train_data.pt')
+    # train_tensor = train_tensor.tensors[0]
     train_len = len(train_data.tensors[0])
 
     # 모델 로드
@@ -316,10 +323,15 @@ def reconstruct_battery_series(model_type="deepsc"):
     # 3. 각 window 복원 및 배터리별 시계열에 합치기 (디버깅 정보 포함)
     with torch.no_grad():
         for i in tqdm(range(test_tensor.shape[0]), desc="Reconstructing"):
+        # for i in tqdm(range(train_tensor.shape[0]), desc="Reconstructing"):
             input_data = test_tensor[i].unsqueeze(0).to(device)
+            # input_data = train_tensor[i].unsqueeze(0).to(device)
             output = model(input_data)
             output_original = scaler.inverse_transform(output.squeeze(0).cpu().numpy())  # (window, feature)
+            
+            # test_data index 결정
             meta = window_meta[train_len + i]  # test set은 train 다음부터 시작
+            # meta = window_meta[i]  # train set은 0부터 시작
             fname = meta['file']
             start = meta['start']
             end = start + window_size
@@ -340,6 +352,7 @@ def reconstruct_battery_series(model_type="deepsc"):
         csv_path = os.path.join(save_dir, f'{base}_reconstructed.csv')
         df_recon.to_csv(csv_path, index=False)
         print(f"복원된 전체 시계열 저장: {csv_path}")
+        # pdb.set_trace()
 
         # 비교 시각화 (test set에 포함된 배터리만)
         if np.any(counts[fname] > 0):

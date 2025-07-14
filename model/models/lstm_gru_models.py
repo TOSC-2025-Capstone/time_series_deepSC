@@ -2,228 +2,209 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class LSTMCompressor(nn.Module):
-    """LSTM 기반 시계열 압축기"""
-    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.1):
-        super(LSTMCompressor, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        
-        self.lstm = nn.LSTM(
-            input_size=input_dim,
-            hidden_size=hidden_dim,
-            num_layers=num_layers,
-            dropout=dropout if num_layers > 1 else 0,
-            batch_first=True,
-            bidirectional=True
-        )
-        
-        # 압축을 위한 추가 레이어
-        self.compress = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),  # bidirectional이므로 *2
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim)  # hidden_dim // 2에서 hidden_dim으로 변경
-        )
+# 시퀀스 길이 압축
+class LSTMCompressor_TimeCompress(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_len=64, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        # 시계열 길이 압축을 위한 pooling
+        self.pool = nn.AdaptiveAvgPool1d(target_len)
         
     def forward(self, x):
-        # x shape: (batch, seq_len, input_dim)
-        lstm_out, (hidden, cell) = self.lstm(x)
-        
-        # 마지막 hidden state를 사용하여 압축
-        # bidirectional이므로 forward와 backward의 마지막 hidden state를 결합
-        last_forward = hidden[-2]  # forward direction의 마지막 hidden state
-        last_backward = hidden[-1]  # backward direction의 마지막 hidden state
-        combined = torch.cat([last_forward, last_backward], dim=1)
-        
-        compressed = self.compress(combined)
+        # x: [batch, 128, 6]
+        lstm_out, _ = self.lstm(x)  # [batch, 128, hidden_dim]
+        # 시계열 길이 압축
+        compressed = lstm_out.permute(0, 2, 1)  # [batch, hidden_dim, 128]
+        compressed = self.pool(compressed)       # [batch, hidden_dim, 64]
+        compressed = compressed.permute(0, 2, 1) # [batch, 64, hidden_dim]
         return compressed
 
-class LSTMDecompressor(nn.Module):
-    """LSTM 기반 시계열 복원기"""
-    def __init__(self, compressed_dim, hidden_dim, seq_len, output_dim, num_layers=2, dropout=0.1):
-        super(LSTMDecompressor, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.seq_len = seq_len
-        self.output_dim = output_dim
-        self.num_layers = num_layers
+# 피쳐 수 압축
+class LSTMCompressor_FeatureCompress(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_features=3, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        # 피쳐 차원 압축
+        self.feature_compress = nn.Linear(hidden_dim, target_features)
         
-        # 압축된 벡터를 확장
-        self.expand = nn.Sequential(
-            nn.Linear(compressed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim * 2)
-        )
+    def forward(self, x):
+        # x: [batch, 128, 6]
+        lstm_out, _ = self.lstm(x)  # [batch, 128, hidden_dim]
+        # 피쳐 차원 압축
+        compressed = self.feature_compress(lstm_out)  # [batch, 128, 3]
+        return compressed
+
+# 위 둘다 압축
+class LSTMCompressor_Both(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_len=64, target_features=3, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        self.pool = nn.AdaptiveAvgPool1d(target_len)
+        self.feature_compress = nn.Linear(hidden_dim, target_features)
         
-        # LSTM을 통한 시계열 생성
-        self.lstm = nn.LSTM(
-            input_size=hidden_dim * 2,
-            hidden_size=hidden_dim,
-            num_layers=num_layers,
-            dropout=dropout if num_layers > 1 else 0,
-            batch_first=True
-        )
+    def forward(self, x):
+        # x: [batch, 128, 6]
+        lstm_out, _ = self.lstm(x)  # [batch, 128, hidden_dim]
+        # 시계열 길이 압축
+        time_compressed = lstm_out.permute(0, 2, 1)  # [batch, hidden_dim, 128]
+        time_compressed = self.pool(time_compressed)  # [batch, hidden_dim, 64]
+        time_compressed = time_compressed.permute(0, 2, 1)  # [batch, 64, hidden_dim]
+        # 피쳐 차원 압축
+        compressed = self.feature_compress(time_compressed)  # [batch, 64, 3]
+        return compressed
+
+# 위 둘 다 복원
+class LSTMDecompressor_Both(nn.Module):
+    def __init__(self, compressed_features, hidden_dim, target_len=128, target_features=6, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.feature_expand = nn.Linear(compressed_features, hidden_dim)
+        self.upsample = nn.Upsample(size=target_len, mode='linear', align_corners=False)
+        self.lstm = nn.LSTM(hidden_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        self.output_layer = nn.Linear(hidden_dim, target_features)
         
-        # 출력 레이어
-        self.output_layer = nn.Linear(hidden_dim, output_dim)
-        
-        # 시간별 가중치 레이어 추가
-        self.time_weights = nn.Parameter(torch.randn(seq_len, hidden_dim * 2))
-        
-    def forward(self, compressed):
-        # compressed shape: (batch, compressed_dim)
-        batch_size = compressed.size(0)
-        
-        # 압축된 벡터를 확장
-        expanded = self.expand(compressed)  # (batch, hidden_dim * 2)
-        
-        # 시간별로 다른 입력 시퀀스 생성 (단순 반복 대신)
-        input_seq = expanded.unsqueeze(1) + self.time_weights.unsqueeze(0)  # (batch, seq_len, hidden_dim * 2)
-        
-        # LSTM을 통한 시계열 생성
-        lstm_out, _ = self.lstm(input_seq)
-        
-        # 출력 레이어
-        output = self.output_layer(lstm_out)  # (batch, seq_len, output_dim)
-        
+    def forward(self, x):
+        # x: [batch, 64, 3]
+        feature_expanded = self.feature_expand(x)  # [batch, 64, hidden_dim]
+        # 시계열 길이 복원
+        time_expanded = feature_expanded.permute(0, 2, 1)  # [batch, hidden_dim, 64]
+        time_expanded = self.upsample(time_expanded)       # [batch, hidden_dim, 128]
+        time_expanded = time_expanded.permute(0, 2, 1)    # [batch, 128, hidden_dim]
+        # LSTM 처리
+        lstm_out, _ = self.lstm(time_expanded)  # [batch, 128, hidden_dim]
+        # 피쳐 차원 복원
+        output = self.output_layer(lstm_out)  # [batch, 128, 6]
         return output
 
+# 시퀀스 길이 압축
+class GRUCompressor_TimeCompress(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_len=64, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.gru = nn.GRU(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        # 시계열 길이 압축을 위한 pooling
+        self.pool = nn.AdaptiveAvgPool1d(target_len)
+        
+    def forward(self, x):
+        # x: [batch, 128, 6]
+        gru_out, _ = self.gru(x)  # [batch, 128, hidden_dim]
+        # 시계열 길이 압축
+        compressed = gru_out.permute(0, 2, 1)  # [batch, hidden_dim, 128]
+        compressed = self.pool(compressed)       # [batch, hidden_dim, 64]
+        compressed = compressed.permute(0, 2, 1) # [batch, 64, hidden_dim]
+        return compressed
+
+# 피쳐 수 압축
+class GRUCompressor_FeatureCompress(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_features=3, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.gru = nn.GRU(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        # 피쳐 차원 압축
+        self.feature_compress = nn.Linear(hidden_dim, target_features)
+        
+    def forward(self, x):
+        # x: [batch, 128, 6]
+        gru_out, _ = self.gru(x)  # [batch, 128, hidden_dim]
+        # 피쳐 차원 압축
+        compressed = self.feature_compress(gru_out)  # [batch, 128, 3]
+        return compressed
+
+# 위 둘다 압축
+class GRUCompressor_Both(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_len=64, target_features=3, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.gru = nn.GRU(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        self.pool = nn.AdaptiveAvgPool1d(target_len)
+        self.feature_compress = nn.Linear(hidden_dim, target_features)
+        
+    def forward(self, x):
+        # x: [batch, 128, 6]
+        gru_out, _ = self.gru(x)  # [batch, 128, hidden_dim]
+        # 시계열 길이 압축
+        time_compressed = gru_out.permute(0, 2, 1)  # [batch, hidden_dim, 128]
+        time_compressed = self.pool(time_compressed)  # [batch, hidden_dim, 64]
+        time_compressed = time_compressed.permute(0, 2, 1)  # [batch, 64, hidden_dim]
+        # 피쳐 차원 압축
+        compressed = self.feature_compress(time_compressed)  # [batch, 64, 3]
+        return compressed
+
+# 위 둘 다 복원
+class GRUDecompressor_Both(nn.Module):
+    def __init__(self, compressed_features, hidden_dim, target_len=128, target_features=6, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.feature_expand = nn.Linear(compressed_features, hidden_dim)
+        self.upsample = nn.Upsample(size=target_len, mode='linear', align_corners=False)
+        self.gru = nn.GRU(hidden_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True)
+        self.output_layer = nn.Linear(hidden_dim, target_features)
+        
+    def forward(self, x):
+        # x: [batch, 64, 3]
+        feature_expanded = self.feature_expand(x)  # [batch, 64, hidden_dim]
+        # 시계열 길이 복원
+        time_expanded = feature_expanded.permute(0, 2, 1)  # [batch, hidden_dim, 64]
+        time_expanded = self.upsample(time_expanded)       # [batch, hidden_dim, 128]
+        time_expanded = time_expanded.permute(0, 2, 1)    # [batch, 128, hidden_dim]
+        # GRU 처리
+        gru_out, _ = self.gru(time_expanded)  # [batch, 128, hidden_dim]
+        # 피쳐 차원 복원
+        output = self.output_layer(gru_out)  # [batch, 128, 6]
+        return output
+
+## 모델 바로보기
 class LSTMDeepSC(nn.Module):
     """LSTM 기반 DeepSC 모델"""
-    def __init__(self, input_dim, seq_len, hidden_dim=128, num_layers=2, dropout=0.1):
+    def __init__(self, input_dim, seq_len, hidden_dim=128, target_len=64, target_features=3, num_layers=2, dropout=0.1):
         super(LSTMDeepSC, self).__init__()
         self.input_dim = input_dim
         self.seq_len = seq_len
         self.hidden_dim = hidden_dim
-        self.compressed_dim = hidden_dim  # hidden_dim // 2에서 hidden_dim으로 변경
+        self.target_len = target_len
+        self.target_features = target_features
         
-        self.encoder = LSTMCompressor(input_dim, hidden_dim, num_layers, dropout)
-        self.decoder = LSTMDecompressor(self.compressed_dim, hidden_dim, seq_len, input_dim, num_layers, dropout)
+        # 올바른 파라미터 전달
+        self.encoder = LSTMCompressor_Both(
+            input_dim, hidden_dim, target_len, target_features, num_layers, dropout
+        )
+        self.decoder = LSTMDecompressor_Both(
+            target_features, hidden_dim, seq_len, input_dim, num_layers, dropout
+        )
         
     def forward(self, x):
-        # 압축
-        compressed = self.encoder(x)
-        # 복원
-        reconstructed = self.decoder(compressed)
+        compressed = self.encoder(x)  # [batch, target_len, target_features]
+        reconstructed = self.decoder(compressed)  # [batch, seq_len, input_dim]
         return reconstructed
     
     def get_compression_ratio(self):
         """압축률 계산"""
         original_size = self.input_dim * self.seq_len
-        compressed_size = self.compressed_dim
+        compressed_size = self.target_len * self.target_features
         return compressed_size / original_size
-
-class GRUCompressor(nn.Module):
-    """GRU 기반 시계열 압축기"""
-    def __init__(self, input_dim, hidden_dim, num_layers=2, dropout=0.1):
-        super(GRUCompressor, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        
-        self.gru = nn.GRU(
-            input_size=input_dim,
-            hidden_size=hidden_dim,
-            num_layers=num_layers,
-            dropout=dropout if num_layers > 1 else 0,
-            batch_first=True,
-            bidirectional=True
-        )
-        
-        # 압축을 위한 추가 레이어
-        self.compress = nn.Sequential(
-            nn.Linear(hidden_dim * 2, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim)  # hidden_dim // 2에서 hidden_dim으로 변경
-        )
-        
-    def forward(self, x):
-        # x shape: (batch, seq_len, input_dim)
-        gru_out, hidden = self.gru(x)
-        
-        # 마지막 hidden state를 사용하여 압축
-        # bidirectional이므로 forward와 backward의 마지막 hidden state를 결합
-        last_forward = hidden[-2]
-        last_backward = hidden[-1]
-        combined = torch.cat([last_forward, last_backward], dim=1)
-        
-        compressed = self.compress(combined)
-        return compressed
-
-class GRUDecompressor(nn.Module):
-    """GRU 기반 시계열 복원기"""
-    def __init__(self, compressed_dim, hidden_dim, seq_len, output_dim, num_layers=2, dropout=0.1):
-        super(GRUDecompressor, self).__init__()
-        self.hidden_dim = hidden_dim
-        self.seq_len = seq_len
-        self.output_dim = output_dim
-        self.num_layers = num_layers
-        
-        # 압축된 벡터를 확장
-        self.expand = nn.Sequential(
-            nn.Linear(compressed_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(hidden_dim, hidden_dim * 2)
-        )
-        
-        # GRU를 통한 시계열 생성
-        self.gru = nn.GRU(
-            input_size=hidden_dim * 2,
-            hidden_size=hidden_dim,
-            num_layers=num_layers,
-            dropout=dropout if num_layers > 1 else 0,
-            batch_first=True
-        )
-        
-        # 출력 레이어
-        self.output_layer = nn.Linear(hidden_dim, output_dim)
-        
-        # 시간별 가중치 레이어 추가
-        self.time_weights = nn.Parameter(torch.randn(seq_len, hidden_dim * 2))
-        
-    def forward(self, compressed):
-        # compressed shape: (batch, compressed_dim)
-        batch_size = compressed.size(0)
-        
-        # 압축된 벡터를 확장
-        expanded = self.expand(compressed)  # (batch, hidden_dim * 2)
-        
-        # 시간별로 다른 입력 시퀀스 생성 (단순 반복 대신)
-        input_seq = expanded.unsqueeze(1) + self.time_weights.unsqueeze(0)  # (batch, seq_len, hidden_dim * 2)
-        
-        # GRU를 통한 시계열 생성
-        gru_out, _ = self.gru(input_seq)
-        
-        # 출력 레이어
-        output = self.output_layer(gru_out)  # (batch, seq_len, output_dim)
-        
-        return output
-
+ 
 class GRUDeepSC(nn.Module):
-    """GRU 기반 DeepSC 모델"""
-    def __init__(self, input_dim, seq_len, hidden_dim=128, num_layers=2, dropout=0.1):
+    """GRU 기반 DeepSC 모델, hidden_dim->target_len으로 시퀀스 압축, input_dim->target_features로 피쳐 압축"""
+    def __init__(self, input_dim, seq_len, hidden_dim=128, target_len=64, target_features=3, num_layers=2, dropout=0.1):
         super(GRUDeepSC, self).__init__()
         self.input_dim = input_dim
         self.seq_len = seq_len
         self.hidden_dim = hidden_dim
-        self.compressed_dim = hidden_dim  # hidden_dim // 2에서 hidden_dim으로 변경
+        self.target_len = target_len
+        self.target_features = target_features
         
-        self.encoder = GRUCompressor(input_dim, hidden_dim, num_layers, dropout)
-        self.decoder = GRUDecompressor(self.compressed_dim, hidden_dim, seq_len, input_dim, num_layers, dropout)
+        # 올바른 파라미터 전달
+        self.encoder = GRUCompressor_Both(
+            input_dim, hidden_dim, target_len, target_features, num_layers, dropout
+        )
+        self.decoder = GRUDecompressor_Both(
+            target_features, hidden_dim, seq_len, input_dim, num_layers, dropout
+        )
         
     def forward(self, x):
-        # 압축
-        compressed = self.encoder(x)
-        # 복원
-        reconstructed = self.decoder(compressed)
+        compressed = self.encoder(x)  # [batch, target_len, target_features]
+        reconstructed = self.decoder(compressed)  # [batch, seq_len, input_dim]
         return reconstructed
     
     def get_compression_ratio(self):
         """압축률 계산"""
         original_size = self.input_dim * self.seq_len
-        compressed_size = self.compressed_dim
+        compressed_size = self.target_len * self.target_features
         return compressed_size / original_size
 
 class Seq2SeqAttention(nn.Module):

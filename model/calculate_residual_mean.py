@@ -24,6 +24,8 @@ def calculate_residual_mean():
     
     # 원본 데이터 경로 (B0047 원본 데이터)
     original_data_path = 'data_handling/merged/B0047.csv'
+
+    model_names = ['Huber', 'MAE', 'MSE']
     
     # 원본 데이터 로드
     print("원본 데이터 로딩 중...")
@@ -81,7 +83,8 @@ def calculate_residual_mean():
     
     # 시각화
     create_residual_plots(mean_residuals, feature_columns)
-    
+    plot_modelwise_residuals(all_residuals, feature_columns, model_names)
+
     return mean_residuals
 
 def create_residual_plots(mean_residuals, feature_columns):
@@ -138,6 +141,41 @@ def create_residual_plots(mean_residuals, feature_columns):
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.savefig(save_dir+'B0047_residual_mean_boxplot.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+def plot_modelwise_residuals(all_residuals, feature_columns, model_names):
+    """
+    각 모델별 잔차(z-score) 시계열을 한 그래프에 겹쳐서 플롯
+    """
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(18, 10))
+    for i, col in enumerate(feature_columns, 1):
+        plt.subplot(2, 3, i)
+        for residuals, name in zip(all_residuals, model_names):
+            plt.plot(residuals[col], label=name, alpha=0.7)
+        plt.title(f'{col} - 모델별 잔차 시계열')
+        plt.xlabel('시간 인덱스')
+        plt.ylabel('Z-score 표준화 잔차')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(save_dir+'B0047_residuals_by_model_timeseries.png', dpi=300, bbox_inches='tight')
+    plt.show()
+
+    # 히스토그램도 추가 (옵션)
+    plt.figure(figsize=(18, 10))
+    for i, col in enumerate(feature_columns, 1):
+        plt.subplot(2, 3, i)
+        for residuals, name in zip(all_residuals, model_names):
+            plt.hist(residuals[col], bins=40, alpha=0.5, label=name, density=True)
+        plt.title(f'{col} - 모델별 잔차 분포')
+        plt.xlabel('Z-score 표준화 잔차')
+        plt.ylabel('밀도')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(save_dir+'B0047_residuals_by_model_hist.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 if __name__ == "__main__":

@@ -50,20 +50,25 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     input_dim = train_tensor.shape[2]  # 6 features
     window_size = train_tensor.shape[1]  # 128
     
+    ## 여기 수정
     if model_type == "lstm":
         model = LSTMDeepSC(
             input_dim=input_dim,
+            target_len=64, 
+            target_features=3, 
             seq_len=window_size,
             hidden_dim=128,
-            num_layers=2,
+            num_layers=4,
             dropout=0.1
         ).to(device)
     elif model_type == "gru":
         model = GRUDeepSC(
             input_dim=input_dim,
+            target_len=64, 
+            target_features=3,
             seq_len=window_size,
             hidden_dim=128,
-            num_layers=2,
+            num_layers=4,
             dropout=0.1
         ).to(device)
     elif model_type == "seq2seq": # 테스트 중 
@@ -84,7 +89,7 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     pdb.set_trace()
 
     # 5. 체크포인트 저장 디렉토리 생성
-    checkpoint_dir = f'checkpoints/{model_type}_deepsc_battery'
+    checkpoint_dir = f'checkpoints/firstcase/MSE/{model_type}/{model_type}_deepsc_battery'
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # 6. 학습 기록
