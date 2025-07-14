@@ -99,6 +99,7 @@ def calculate_integrated_metrics(model_results, feature_columns):
     for model_name, results in model_results.items():
         all_zscore_residuals.append(results['residuals_zscore'])
     
+    
     mean_residuals = pd.concat(all_zscore_residuals).groupby(level=0).mean()
     
     # 2. 모델 간 일관성 지표

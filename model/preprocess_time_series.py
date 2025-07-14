@@ -15,21 +15,24 @@ def is_valid_csv(fpath, expected_columns):
     except:
         return False
 
-def load_all_valid_csv_tensors(folder_path, feature_cols, batch_size=8, save_split_path=None, split_ratio=0.8, window_size=128, stride=64):
+def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8, save_split_path=None, split_ratio=0.8, window_size=128, stride=64, cycle_col='cycle_idx'):
     files = sorted([f for f in os.listdir(folder_path) if f.endswith('.csv')])
     total_files = len(files)
     valid_files = 0
     all_data = []  # 모든 원본 데이터를 먼저 수집
-    
+    all_cycles = []  # cycle_idx 정보
+
     # 1단계: 모든 데이터 수집
     for fname in tqdm(files, desc="Loading CSV files"):
         fpath = os.path.join(folder_path, fname)
-        if not is_valid_csv(fpath, feature_cols):
+        if not is_valid_csv(fpath, feature_cols + [cycle_col]):
             continue
         try:
             df = pd.read_csv(fpath)
             data = df[feature_cols].values.astype(np.float32)
+            cycles = df[cycle_col].values.astype(np.int32)
             all_data.append(data)
+            all_cycles.append(cycles)
             valid_files += 1
         except Exception as e:
             print(f"[WARN] Failed to process {fname}: {e}")
@@ -45,24 +48,36 @@ def load_all_valid_csv_tensors(folder_path, feature_cols, batch_size=8, save_spl
     combined_data = np.vstack(all_data)  # 모든 데이터를 세로로 합침
     scaler = MinMaxScaler()
     scaled_combined = scaler.fit_transform(combined_data)
-    
-    # 3단계: 스케일링된 데이터를 다시 파일별로 분할 및 window meta 저장
+
+    # 3단계: cycle별로 파일 분리 및 window 생성
     all_windows = []
-    window_meta = []  # (파일명, window_start_index) 저장
+    window_meta = []  # (파일명, cycle_idx, window_start_index) 저장
     start_idx = 0
-    for fname, data in zip(files, all_data):
+    for fname, data, cycles in zip(files, all_data, all_cycles):
         data_len = len(data)
         end_idx = start_idx + data_len
         scaled_data = scaled_combined[start_idx:end_idx]
-        # 윈도우 생성
-        for win_start in range(0, len(scaled_data) - window_size + 1, stride):
-            window = scaled_data[win_start:win_start + window_size]
-            all_windows.append(torch.tensor(window, dtype=torch.float32))
-            window_meta.append({'file': fname, 'start': win_start})
+        df = pd.DataFrame(scaled_data, columns=feature_cols)
+        df[cycle_col] = cycles
+        # cycle별로 groupby
+        for cycle_id, group in df.groupby(cycle_col):
+            group = group.reset_index(drop=True)
+            group_len = len(group)
+            # progress ratio 계산
+            progress_ratio = np.linspace(0, 1, group_len, endpoint=True)
+            for win_start in range(0, group_len - window_size + 1, stride):
+                window = group.iloc[win_start:win_start + window_size].copy()
+                # cycle_idx, progress_ratio feature 추가
+                window['cycle_idx'] = cycle_id
+                window['progress_ratio'] = progress_ratio[win_start:win_start + window_size]
+                # feature 순서: 기존 feature_cols + ['cycle_idx', 'progress_ratio']
+                window_tensor = torch.tensor(window[feature_cols + ['cycle_idx', 'progress_ratio']].values, dtype=torch.float32)
+                all_windows.append(window_tensor)
+                window_meta.append({'file': fname, 'cycle_idx': cycle_id, 'start': win_start})
         start_idx = end_idx
 
     # 텐서로 변환
-    full_tensor = torch.stack(all_windows, dim=0)  # [Total_N, window, D]
+    full_tensor = torch.stack(all_windows, dim=0)  # [Total_N, window, D+2]
 
     if save_split_path:
         N = full_tensor.shape[0]
@@ -76,12 +91,10 @@ def load_all_valid_csv_tensors(folder_path, feature_cols, batch_size=8, save_spl
         scaler_path = os.path.join(save_split_path, 'scaler.pkl')
         joblib.dump(scaler, scaler_path)
         print(f"Saved scaler to {scaler_path}")
-        
         # window_meta도 저장
         with open(os.path.join(save_split_path, 'window_meta.pkl'), 'wb') as f:
             pickle.dump(window_meta, f)
         print(f"Saved window_meta to {os.path.join(save_split_path, 'window_meta.pkl')}")
-        
         # 스케일링 검증
         print("\n=== 스케일링 검증 ===")
         sample_original = combined_data[:100]  # 처음 100개 샘플
@@ -102,13 +115,12 @@ if __name__ == '__main__':
     feature_cols = [
         'Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time'
     ]
-
-    load_all_valid_csv_tensors(
+    load_all_valid_csv_tensors_by_cycle(
         folder_path="data_handling/merged",
         feature_cols=feature_cols,
         batch_size=8,
-        save_split_path="./model/preprocessed_data",
+        save_split_path="./model/preprocessed_data_by_cycle",
         split_ratio=0.8,
-        window_size=128,
-        stride=64,
+        window_size=64,
+        stride=32,
     )

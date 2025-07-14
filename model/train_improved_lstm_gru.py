@@ -12,7 +12,7 @@ import pickle
 from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC, Seq2SeqAttention
 import pdb
 
-def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate=1e-5):
+def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate=1e-4):
     """
     개선된 LSTM 또는 GRU 모델을 학습하는 함수
     
@@ -26,8 +26,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     
     # 1. 데이터 로드
     print("1. 데이터 로드 중...")
-    train_data = torch.load('model/preprocessed_data/train_data.pt')
-    val_data = torch.load('model/preprocessed_data/test_data.pt')
+    train_data = torch.load('model/preprocessed_data_by_cycle/train_data.pt')
+    val_data = torch.load('model/preprocessed_data_by_cycle/test_data.pt')
     
     train_tensor = train_data.tensors[0]
     val_tensor = val_data.tensors[0]
@@ -47,15 +47,17 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
     
-    input_dim = train_tensor.shape[2]  # 6 features
+    input_dim = train_tensor.shape[2]  # 6 features -> 8 featrues
     window_size = train_tensor.shape[1]  # 128
     
+    # pdb.set_trace()
+
     ## 여기 수정
     if model_type == "lstm":
         model = LSTMDeepSC(
             input_dim=input_dim,
-            target_len=64, 
-            target_features=3, 
+            target_len=window_size//2, 
+            target_features=input_dim//2, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=4,
@@ -89,7 +91,7 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     pdb.set_trace()
 
     # 5. 체크포인트 저장 디렉토리 생성
-    checkpoint_dir = f'checkpoints/firstcase/MSE/{model_type}/{model_type}_deepsc_battery'
+    checkpoint_dir = f'checkpoints/cycle_separate_case/MSE/{model_type}/{model_type}_deepsc_battery'
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # 6. 학습 기록

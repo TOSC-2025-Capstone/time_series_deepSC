@@ -326,9 +326,10 @@ class DeepSC(nn.Module):
         channel_encoded = self.channel_encoder(compressed)
 
         # 4단계 : 채널 상태 적용
+        channel_syms = channel_encoded
         # channel_syms = self.channels.AWGN(channel_encoded, 0.1)
         # channel_syms = self.channels.Rayleigh(channel_encoded, 0.1)
-        channel_syms = self.channels.Rician(channel_encoded, 0.1)
+        # channel_syms = self.channels.Rician(channel_encoded, 0.1)
         
         # 5단계: 채널 디코더 (복원)
         channel_decoded = self.channel_decoder(channel_syms)

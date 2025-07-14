@@ -13,7 +13,7 @@ from collections import defaultdict
 import pdb
 
 loss_type = 'MSE' # 3 loss 테스트 중 제일 좋았음
-model_type = 'deepsc'
+model_type = 'LSTM'
 channel_type = 'Rician'
 
 def create_model(model_type, input_dim, window_size, device):
@@ -37,14 +37,14 @@ def create_model(model_type, input_dim, window_size, device):
         # LSTM 기반 모델
         model = LSTMDeepSC(
             input_dim=input_dim,
-            target_len=64, 
-            target_features=3, 
+            target_len=window_size//2, 
+            target_features=input_dim//2, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/firstcase/MSE/lstm/lstm_deepsc_battery_epoch78.pth'
+        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/lstm/lstm_deepsc_battery_epoch63.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
@@ -69,9 +69,14 @@ def test_deepsc_battery(model_type="deepsc"):
     
     # 1. 데이터 로드
     print("1. 데이터 로드 중...")
-    train_data = torch.load('model/preprocessed_data/train_data.pt')
-    test_data = torch.load('model/preprocessed_data/test_data.pt')
-    scaler = joblib.load('model/preprocessed_data/scaler.pkl')
+    '''기본 전처리 데이터'''
+    # train_data = torch.load('model/preprocessed_data/train_data.pt')
+    # test_data = torch.load('model/preprocessed_data/test_data.pt')
+    # scaler = joblib.load('model/preprocessed_data/scaler.pkl')
+    '''cycle 별로 나눈 전처리 데이터'''
+    train_data = torch.load('model/preprocessed_data_by_cycle/train_data.pt')
+    test_data = torch.load('model/preprocessed_data_by_cycle/test_data.pt')
+    scaler = joblib.load('model/preprocessed_data_by_cycle/scaler.pkl')
     
     train_tensor = train_data.tensors[0]  # (N, window, feature)
     test_tensor = test_data.tensors[0]
@@ -283,13 +288,23 @@ def reconstruct_battery_series(model_type="deepsc"):
     save_dir = f'reconstructed_{channel_type}_{model_type}_{loss_type}'
     # save_dir = f'reconstructed_{model_type}_{loss_type}'
 
+    # # 데이터 및 메타 정보 로드
+    # test_data = torch.load('model/preprocessed_data/test_data.pt')
+    # test_tensor = test_data.tensors[0]
+    # scaler = joblib.load('model/preprocessed_data/scaler.pkl')
+    # with open('model/preprocessed_data/window_meta.pkl', 'rb') as f:
+    #     window_meta = pickle.load(f)
+    # train_data = torch.load('model/preprocessed_data/train_data.pt')
+    # # train_tensor = train_tensor.tensors[0]
+    # train_len = len(train_data.tensors[0])
+
     # 데이터 및 메타 정보 로드
-    test_data = torch.load('model/preprocessed_data/test_data.pt')
+    test_data = torch.load('model/preprocessed_data_by_cycle/test_data.pt')
     test_tensor = test_data.tensors[0]
-    scaler = joblib.load('model/preprocessed_data/scaler.pkl')
-    with open('model/preprocessed_data/window_meta.pkl', 'rb') as f:
+    scaler = joblib.load('model/preprocessed_data_by_cycle/scaler.pkl')
+    with open('model/preprocessed_data_by_cycle/window_meta.pkl', 'rb') as f:
         window_meta = pickle.load(f)
-    train_data = torch.load('model/preprocessed_data/train_data.pt')
+    train_data = torch.load('model/preprocessed_data_by_cycle/train_data.pt')
     # train_tensor = train_tensor.tensors[0]
     train_len = len(train_data.tensors[0])
 
@@ -317,7 +332,8 @@ def reconstruct_battery_series(model_type="deepsc"):
         battery_lengths[fname] = len(df)
 
     # 2. 배터리별로 빈 시계열 배열 준비 (복원값, 카운트)
-    reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim)) for fname in battery_files}
+    # input-2 => cycle_idx, progress_ratio column 제외
+    reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim-2)) for fname in battery_files}
     counts = {fname: np.zeros(battery_lengths[fname]) for fname in battery_files}
 
     # 3. 각 window 복원 및 배터리별 시계열에 합치기 (디버깅 정보 포함)
@@ -327,7 +343,15 @@ def reconstruct_battery_series(model_type="deepsc"):
             input_data = test_tensor[i].unsqueeze(0).to(device)
             # input_data = train_tensor[i].unsqueeze(0).to(device)
             output = model(input_data)
-            output_original = scaler.inverse_transform(output.squeeze(0).cpu().numpy())  # (window, feature)
+            output_np = output.squeeze(0).cpu().numpy()  # (window, 8)  # 8 = 6 features + cycle_idx + progress_ratio
+            output_main = output_np[:, :6]  # 앞의 6개 feature만 추출
+            output_rest = output_np[:, 6:]  # cycle_idx, progress_ratio
+
+            # scaler로 역변환
+            output_main_inv = scaler.inverse_transform(output_main)  # (window, 6)
+
+            # 필요하다면 다시 붙이기
+            # output_inv_full = np.concatenate([output_main_inv, output_rest], axis=1)
             
             # test_data index 결정
             meta = window_meta[train_len + i]  # test set은 train 다음부터 시작
@@ -335,8 +359,8 @@ def reconstruct_battery_series(model_type="deepsc"):
             fname = meta['file']
             start = meta['start']
             end = start + window_size
-            print(f"복원 window {i}: {fname} {start}-{end}, output mean={output_original.mean():.4f}")
-            reconstructed[fname][start:end] += output_original
+            print(f"복원 window {i}: {fname} {start}-{end}, output mean={output_main_inv.mean():.4f}")
+            reconstructed[fname][start:end] += output_main_inv
             counts[fname][start:end] += 1
 
     # 4. 겹치는 부분 평균내기
