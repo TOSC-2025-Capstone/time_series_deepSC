@@ -4,3 +4,8 @@ data_handling/deepsc_dataset
 data_handling/extra_infos
 data_handling/images
 recons
+preprocessed_data_128
+data_handling/preprocessed_data_anomaly_eliminated_1
+data_handling/merged_anomaly_eliminated_z
+data_handling/merged_preprocessed
+data_handling/yujin_files

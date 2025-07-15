@@ -7,10 +7,11 @@ from tqdm import tqdm
 from torch.utils.data import TensorDataset
 import joblib
 import pickle
+import matplotlib.pyplot as plt 
 import pdb
 
 window_size_arr = [16, 32, 64, 128]
-window_size = window_size_arr[1]
+window_size = window_size_arr[3]
 
 def is_valid_csv(fpath, expected_columns):
     try:
@@ -19,33 +20,13 @@ def is_valid_csv(fpath, expected_columns):
     except:
         return False
 
-def correct_outliers_with_interpolation(df, feature_cols):
-    df = df.copy()
-    for col in feature_cols:
-        series = df[col]
-        Q1 = series.quantile(0.25)
-        Q3 = series.quantile(0.75)
-        IQR = Q3 - Q1
-        lower = Q1 - 1.5 * IQR
-        upper = Q3 + 1.5 * IQR
-        # 이상치 마스킹
-        outlier_mask = (series < lower) | (series > upper)
-        if outlier_mask.any():
-            # 이상치 위치를 NaN으로
-            series[outlier_mask] = np.nan
-            # 선형 보간
-            series = series.interpolate(method='linear', limit_direction='both')
-            # 남은 NaN은 앞뒤 값으로 채움
-            series = series.fillna(method='bfill').fillna(method='ffill')
-            df[col] = series
-    return df
-
 def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8, save_split_path=None, split_ratio=0.8, window_size=128, stride=64, cycle_col='cycle_idx'):
     files = sorted([f for f in os.listdir(folder_path) if f.endswith('.csv')])
     total_files = len(files)
     valid_files = 0
     all_data = []  # 모든 원본 데이터를 먼저 수집
     all_cycles = []  # cycle_idx 정보
+    # 'Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time'
 
     # 1단계: 모든 데이터 수집
     for fname in tqdm(files, desc="Loading CSV files"):
@@ -55,7 +36,13 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
         try:
             df = pd.read_csv(fpath)
             # 이상치 보정
-            df = correct_outliers_with_interpolation(df, feature_cols)
+            # df = correct_outliers_with_interpolation(df, feature_cols)
+            df = df[df['Voltage_load'] < 10]
+            df = df[df['Current_load'] < 2]
+            PREPROCESSED_DIR = "data_handling/merged_preprocessed"
+            save_path = os.path.join(PREPROCESSED_DIR, fname)
+            df.to_csv(save_path, index=False)
+
             data = df[feature_cols].values.astype(np.float32)
             cycles = df[cycle_col].values.astype(np.int32)
             all_data.append(data)
@@ -66,7 +53,7 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
 
     print(f"Valid CSV files loaded: {valid_files} / {total_files}")
 
-    pdb.set_trace()
+    # pdb.set_trace()
 
     if not all_data:
         print("[ERROR] No valid data found.")
@@ -78,18 +65,23 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
     scaler = MinMaxScaler()
     scaled_combined = scaler.fit_transform(combined_data)
 
-    pdb.set_trace()
+    # pdb.set_trace()
 
     # 3단계: cycle별로 파일 분리 및 window 생성
     all_windows = []
     window_meta = []  # (파일명, cycle_idx, window_start_index) 저장
     start_idx = 0
+
+    # 전처리된 데이터 저장 폴더 생성
     for fname, data, cycles in zip(files, all_data, all_cycles):
         data_len = len(data)
         end_idx = start_idx + data_len
         scaled_data = scaled_combined[start_idx:end_idx]
         df = pd.DataFrame(scaled_data, columns=feature_cols)
         df[cycle_col] = cycles
+        # 전처리된 데이터 저장
+        save_path = os.path.join(PREPROCESSED_DIR, fname)
+        df.to_csv(save_path, index=False)
         # cycle별로 groupby
         for cycle_id, group in df.groupby(cycle_col):
             group = group.reset_index(drop=True)
@@ -99,19 +91,18 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
             for win_start in range(0, group_len - window_size + 1, stride):
                 window = group.iloc[win_start:win_start + window_size].copy()
                 # cycle_idx, progress_ratio feature 추가
-                window['cycle_idx'] = cycle_id
-                window['progress_ratio'] = progress_ratio[win_start:win_start + window_size]
-                # feature 순서: 기존 feature_cols + ['cycle_idx', 'progress_ratio']
-                window_tensor = torch.tensor(window[feature_cols + ['cycle_idx', 'progress_ratio']].values, dtype=torch.float32)
+                # window['cycle_idx'] = cycle_id
+                # window['progress_ratio'] = progress_ratio[win_start:win_start + window_size]
+                # # feature 순서: 기존 feature_cols + ['cycle_idx', 'progress_ratio']
+                # window_tensor = torch.tensor(window[feature_cols + ['cycle_idx', 'progress_ratio']].values, dtype=torch.float32)
+                window_tensor = torch.tensor(window[feature_cols].values, dtype=torch.float32)
                 all_windows.append(window_tensor)
                 window_meta.append({'file': fname, 'cycle_idx': cycle_id, 'start': win_start})
         start_idx = end_idx
 
     # 텐서로 변환
     full_tensor = torch.stack(all_windows, dim=0)  # [Total_N, window, D+2]
-
-    pdb.set_trace()
-
+    
     if save_split_path:
         N = full_tensor.shape[0]
         train_len = int(N * split_ratio)
@@ -130,8 +121,11 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
         print(f"Saved window_meta to {os.path.join(save_split_path, 'window_meta.pkl')}")
         # 스케일링 검증
         print("\n=== 스케일링 검증 ===")
-        sample_original = combined_data[:100]  # 처음 100개 샘플
-        sample_scaled = scaled_combined[:100]
+        # sample_original = combined_data[:100]  # 처음 100개 샘플
+        # sample_scaled = scaled_combined[:100]
+        # sample_restored = scaler.inverse_transform(sample_scaled)
+        sample_original = combined_data  # 처음 100개 샘플
+        sample_scaled = scaled_combined
         sample_restored = scaler.inverse_transform(sample_scaled)
         feature_names = feature_cols
         verify_scaling(sample_original, sample_scaled, sample_restored, feature_names)
@@ -153,8 +147,9 @@ if __name__ == '__main__':
         folder_path="data_handling/merged",
         feature_cols=feature_cols,
         batch_size=8,
-        save_split_path="./model/preprocessed_data_anomaly_eliminated",
+        # save_split_path="./model/preprocessed_data_anomaly_eliminated",
+        save_split_path="./model/preprocessed_data_128",
         split_ratio=0.8,
         window_size=window_size,
-        stride=window_size//2,
+        stride=window_size//4,
     )

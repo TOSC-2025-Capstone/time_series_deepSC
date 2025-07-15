@@ -4,7 +4,7 @@ import joblib
 import numpy as np
 from tqdm import tqdm
 from models.transceiver import DeepSC
-from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC
+from models.lstm_gru_models import LSTMDeepSC, GRUDeepSC, LSTMAttentionDeepSC
 import matplotlib.pyplot as plt 
 import pandas as pd
 import os
@@ -13,7 +13,7 @@ from collections import defaultdict
 import pdb
 
 loss_type = 'MSE' # 3 loss 테스트 중 제일 좋았음
-model_type = 'LSTM'
+model_type = 'at_LSTM'
 channel_type = 'no_channel'
 
 def create_model(model_type, input_dim, window_size, device):
@@ -37,14 +37,16 @@ def create_model(model_type, input_dim, window_size, device):
         # LSTM 기반 모델
         model = LSTMDeepSC(
             input_dim=input_dim,
-            target_len=window_size//2, 
-            target_features=input_dim//2, 
+            # target_len=window_size//2, 
+            # target_features=input_dim//2, 
+            target_len=window_size, 
+            target_features=input_dim, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/lstm/lstm_deepsc_battery_epoch21.pth'
+        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/lstm/lstm_deepsc_battery_epoch1.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
@@ -58,6 +60,20 @@ def create_model(model_type, input_dim, window_size, device):
             dropout=0.1
         ).to(device)
         checkpoint_path = 'checkpoints/firstcase/MSE/gru/gru_deepsc_battery_epoch80.pth'
+
+    elif model_type == "at_lstm":
+        model = LSTMAttentionDeepSC(
+            input_dim=input_dim,  # 입력 feature 수
+            seq_len=window_size,  # window size
+            hidden_dim=128,
+            target_len=window_size//2,
+            target_features=input_dim//2,
+            num_layers=2,
+            dropout=0.1,
+            num_heads=input_dim//2
+        ).to(device)
+        # pdb.set_trace()
+        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/at_lstm/at_lstm_deepsc_battery/at_lstm_deepsc_battery_epoch78.pth'
         
     else:
         raise ValueError(f"지원하지 않는 모델 타입: {model_type}")
@@ -288,23 +304,13 @@ def reconstruct_battery_series(model_type="deepsc"):
     save_dir = f'reconstructed_{channel_type}_{model_type}_{loss_type}'
     # save_dir = f'reconstructed_{model_type}_{loss_type}'
 
-    # # 데이터 및 메타 정보 로드
-    # test_data = torch.load('model/preprocessed_data/test_data.pt')
-    # test_tensor = test_data.tensors[0]
-    # scaler = joblib.load('model/preprocessed_data/scaler.pkl')
-    # with open('model/preprocessed_data/window_meta.pkl', 'rb') as f:
-    #     window_meta = pickle.load(f)
-    # train_data = torch.load('model/preprocessed_data/train_data.pt')
-    # # train_tensor = train_tensor.tensors[0]
-    # train_len = len(train_data.tensors[0])
-
     # 데이터 및 메타 정보 로드
-    test_data = torch.load('model/preprocessed_data_anomaly_eliminated/test_data.pt')
+    test_data = torch.load('model/preprocessed_data_128/test_data.pt')
     test_tensor = test_data.tensors[0]
-    scaler = joblib.load('model/preprocessed_data_anomaly_eliminated/scaler.pkl')
-    with open('model/preprocessed_data_anomaly_eliminated/window_meta.pkl', 'rb') as f:
+    scaler = joblib.load('model/preprocessed_data_128/scaler.pkl')
+    with open('model/preprocessed_data_128/window_meta.pkl', 'rb') as f:
         window_meta = pickle.load(f)
-    train_data = torch.load('model/preprocessed_data_anomaly_eliminated/train_data.pt')
+    train_data = torch.load('model/preprocessed_data_128/train_data.pt')
     # train_tensor = train_tensor.tensors[0]
     train_len = len(train_data.tensors[0])
 
@@ -328,12 +334,14 @@ def reconstruct_battery_series(model_type="deepsc"):
     battery_files = sorted(set([meta['file'] for meta in window_meta]))
     battery_lengths = {}
     for fname in battery_files:
-        df = pd.read_csv(os.path.join('data_handling/merged_anomaly_eliminated', fname))
+        # df = pd.read_csv(os.path.join('data_handling/merged_anomaly_eliminated', fname))
+        df = pd.read_csv(os.path.join('data_handling/merged_preprocessed', fname))
         battery_lengths[fname] = len(df)
 
     # 2. 배터리별로 빈 시계열 배열 준비 (복원값, 카운트)
     # input-2 => cycle_idx, progress_ratio column 제외
-    reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim-2)) for fname in battery_files}
+    # reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim-2)) for fname in battery_files}
+    reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim)) for fname in battery_files}
     counts = {fname: np.zeros(battery_lengths[fname]) for fname in battery_files}
 
     # 3. 각 window 복원 및 배터리별 시계열에 합치기 (디버깅 정보 포함)
@@ -350,6 +358,8 @@ def reconstruct_battery_series(model_type="deepsc"):
             # scaler로 역변환
             output_main_inv = scaler.inverse_transform(output_main)  # (window, 6)
 
+            pdb.set_trace()
+
             # 필요하다면 다시 붙이기
             # output_inv_full = np.concatenate([output_main_inv, output_rest], axis=1)
             
@@ -360,6 +370,7 @@ def reconstruct_battery_series(model_type="deepsc"):
             start = meta['start']
             end = start + window_size
             print(f"복원 window {i}: {fname} {start}-{end}, output mean={output_main_inv.mean():.4f}")
+            # pdb.set_trace()
             reconstructed[fname][start:end] += output_main_inv
             counts[fname][start:end] += 1
 
@@ -380,7 +391,9 @@ def reconstruct_battery_series(model_type="deepsc"):
 
         # 비교 시각화 (test set에 포함된 배터리만)
         if np.any(counts[fname] > 0):
+            # 비교 원본 경로
             df_orig = pd.read_csv(os.path.join('data_handling/merged', fname))
+            # df_orig = pd.read_csv(os.path.join('data_handling/merged_preprocessed', fname))
             plt.figure(figsize=(15, 10))
             for i, col in enumerate(feature_cols):
                 plt.subplot(2, 3, i+1)
@@ -526,33 +539,35 @@ if __name__ == "__main__":
     
     choice = input("원하는 옵션을 선택하세요 (1-5): ").strip()
     
+    models = ["deepsc", "lstm", "gru", "at_lstm"]
+
     if choice == "1":
         compare_all_models()
         exit()
     elif choice == "2":
         model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
-        if model_choice in ["deepsc", "lstm", "gru"]:
+        if model_choice in models:
             test_deepsc_battery(model_choice)
         else:
             print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
             test_deepsc_battery("deepsc")
     elif choice == "3":
         model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
-        if model_choice in ["deepsc", "lstm", "gru"]:
+        if model_choice in models:
             reconstruct_battery_series(model_choice)
         else:
             print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
             reconstruct_battery_series("deepsc")
     elif choice == "4":
         model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
-        if model_choice in ["deepsc", "lstm", "gru"]:
+        if model_choice in models:
             compare_original_reconstructed(model_choice)
         else:
             print("잘못된 모델 선택입니다. 기본값으로 deepsc를 사용합니다.")
             compare_original_reconstructed("deepsc")
     elif choice == "5":
         model_choice = input("모델을 선택하세요 (deepsc/lstm/gru): ").strip().lower()
-        if model_choice in ["deepsc", "lstm", "gru"]:
+        if model_choice in models:
             test_deepsc_battery(model_choice)
             reconstruct_battery_series(model_choice)
             compare_original_reconstructed(model_choice)

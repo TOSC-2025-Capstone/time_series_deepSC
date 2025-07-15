@@ -300,3 +300,33 @@ class BiLSTMDeepSC(nn.Module):
         original_size = self.input_dim * self.seq_len
         compressed_size = self.target_len * self.target_features
         return compressed_size / original_size
+
+class LSTMAttentionDeepSC(nn.Module):
+    """LSTM + Self-Attention 기반 DeepSC 모델"""
+    def __init__(self, input_dim, seq_len, hidden_dim=128, target_len=64, target_features=2, num_layers=2, dropout=0.1, num_heads=4):
+        super(LSTMAttentionDeepSC, self).__init__()
+        self.input_dim = input_dim
+        self.seq_len = seq_len
+        self.hidden_dim = hidden_dim
+        self.target_len = target_len
+        self.target_features = target_features
+        self.encoder = LSTMCompressor_Both(
+            input_dim, hidden_dim, target_len, target_features, num_layers, dropout
+        )
+        # attention의 embed_dim은 target_features로 맞춤
+        self.attn = nn.MultiheadAttention(embed_dim=target_features, num_heads=num_heads, batch_first=True)
+        self.decoder = LSTMDecompressor_Both(
+            # target_features, hidden_dim, seq_len, input_dim-2, num_layers, dropout
+            target_features, hidden_dim, seq_len, input_dim, num_layers, dropout
+        )
+    def forward(self, x):
+        # x: [batch, seq_len, input_dim]
+        compressed = self.encoder(x)  # [batch, target_len, target_features]
+        # Self-attention 적용
+        attn_out, _ = self.attn(compressed, compressed, compressed)  # [batch, target_len, target_features]
+        reconstructed = self.decoder(attn_out)  # [batch, seq_len, input_dim-2]
+        return reconstructed
+    def get_compression_ratio(self):
+        original_size = self.input_dim * self.seq_len
+        compressed_size = self.target_len * self.target_features
+        return compressed_size / original_size
