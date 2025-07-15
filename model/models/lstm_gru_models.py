@@ -160,11 +160,13 @@ class LSTMDeepSC(nn.Module):
         self.target_features = target_features
         
         # 올바른 파라미터 전달
+        # input_dim, hidden_dim, target_len=64, target_features=3, num_layers=2, dropout=0.1
         self.encoder = LSTMCompressor_Both(
             input_dim, hidden_dim, target_len, target_features, num_layers, dropout
         )
+        # compressed_features, hidden_dim, target_len=128, target_features=6, num_layers=2, dropout=0.1
         self.decoder = LSTMDecompressor_Both(
-            target_features, hidden_dim, seq_len, input_dim, num_layers, dropout
+            target_features, hidden_dim, seq_len, input_dim-2, num_layers, dropout
         )
         
     def forward(self, x):
@@ -241,4 +243,60 @@ class Seq2SeqAttention(nn.Module):
         """압축률 계산"""
         original_size = self.input_dim * self.seq_len
         compressed_size = self.hidden_dim
+        return compressed_size / original_size
+
+class BiLSTMCompressor_Both(nn.Module):
+    def __init__(self, input_dim, hidden_dim, target_len=64, target_features=3, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, dropout=dropout, batch_first=True, bidirectional=True)
+        self.pool = nn.AdaptiveAvgPool1d(target_len)
+        self.feature_compress = nn.Linear(hidden_dim*2, target_features)  # *2 for bidirectional
+    def forward(self, x):
+        # x: [batch, 128, 8]
+        lstm_out, _ = self.lstm(x)  # [batch, 128, hidden_dim*2]
+        time_compressed = lstm_out.permute(0, 2, 1)  # [batch, hidden_dim*2, 128]
+        time_compressed = self.pool(time_compressed)  # [batch, hidden_dim*2, 64]
+        time_compressed = time_compressed.permute(0, 2, 1)  # [batch, 64, hidden_dim*2]
+        compressed = self.feature_compress(time_compressed)  # [batch, 64, target_features]
+        return compressed
+
+class BiLSTMDecompressor_Both(nn.Module):
+    def __init__(self, compressed_features, hidden_dim, target_len=128, target_features=6, num_layers=2, dropout=0.1):
+        super().__init__()
+        self.feature_expand = nn.Linear(compressed_features, hidden_dim*2)
+        self.upsample = nn.Upsample(size=target_len, mode='linear', align_corners=False)
+        self.lstm = nn.LSTM(hidden_dim*2, hidden_dim, num_layers, dropout=dropout, batch_first=True, bidirectional=True)
+        self.output_layer = nn.Linear(hidden_dim*2, target_features)
+    def forward(self, x):
+        # x: [batch, 64, compressed_features]
+        feature_expanded = self.feature_expand(x)  # [batch, 64, hidden_dim*2]
+        time_expanded = feature_expanded.permute(0, 2, 1)  # [batch, hidden_dim*2, 64]
+        time_expanded = self.upsample(time_expanded)       # [batch, hidden_dim*2, 128]
+        time_expanded = time_expanded.permute(0, 2, 1)    # [batch, 128, hidden_dim*2]
+        lstm_out, _ = self.lstm(time_expanded)  # [batch, 128, hidden_dim*2]
+        output = self.output_layer(lstm_out)  # [batch, 128, target_features]
+        return output
+
+class BiLSTMDeepSC(nn.Module):
+    """Bidirectional LSTM 기반 DeepSC 모델"""
+    def __init__(self, input_dim, seq_len, hidden_dim=128, target_len=64, target_features=3, num_layers=2, dropout=0.1):
+        super(BiLSTMDeepSC, self).__init__()
+        self.input_dim = input_dim
+        self.seq_len = seq_len
+        self.hidden_dim = hidden_dim
+        self.target_len = target_len
+        self.target_features = target_features
+        self.encoder = BiLSTMCompressor_Both(
+            input_dim, hidden_dim, target_len, target_features, num_layers, dropout
+        )
+        self.decoder = BiLSTMDecompressor_Both(
+            target_features, hidden_dim, seq_len, input_dim-2, num_layers, dropout
+        )
+    def forward(self, x):
+        compressed = self.encoder(x)  # [batch, target_len, target_features]
+        reconstructed = self.decoder(compressed)  # [batch, seq_len, input_dim-2]
+        return reconstructed
+    def get_compression_ratio(self):
+        original_size = self.input_dim * self.seq_len
+        compressed_size = self.target_len * self.target_features
         return compressed_size / original_size

@@ -26,8 +26,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     
     # 1. 데이터 로드
     print("1. 데이터 로드 중...")
-    train_data = torch.load('model/preprocessed_data_by_cycle/train_data.pt')
-    val_data = torch.load('model/preprocessed_data_by_cycle/test_data.pt')
+    train_data = torch.load('model/preprocessed_data_anomaly_eliminated/train_data.pt')
+    val_data = torch.load('model/preprocessed_data_anomaly_eliminated/test_data.pt')
     
     train_tensor = train_data.tensors[0]
     val_tensor = val_data.tensors[0]
@@ -56,8 +56,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     if model_type == "lstm":
         model = LSTMDeepSC(
             input_dim=input_dim,
-            target_len=window_size//2, 
-            target_features=input_dim//2, 
+            target_len=window_size//2-1, 
+            target_features=input_dim//2-1, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=4,
@@ -80,6 +80,16 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
             seq_len=window_size,
             output_dim=input_dim,
             num_layers=2,
+            dropout=0.1
+        ).to(device)
+    elif model_type == "bi_lstm":
+        model = BiLSTMDeepSC(
+            input_dim=input_dim,  # 입력 feature 수
+            target_len=window_size//2-1, 
+            target_features=input_dim//2-1, 
+            hidden_dim=128,
+            seq_len=window_size,  # window size
+            num_layers=4,
             dropout=0.1
         ).to(device)
 
@@ -108,7 +118,7 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     for epoch in range(num_epochs):
         # 학습 모드
         model.train()
-        train_loss = 0.0
+        train_loss = 0.0 
         
         # 학습 루프
         train_pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{num_epochs} [Train]')
@@ -117,7 +127,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
             
             optimizer.zero_grad()
             output = model(data)
-            loss = criterion(output, target)
+            # 25.07.15 - 추가 column 2개(cycle_idx, progress_ratio)를 제거한 model output과 target을 맞춰줌
+            loss = criterion(output, target[:, :, :-2])
             loss.backward()
             
             # 그래디언트 클리핑 추가
@@ -140,7 +151,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
             for data, target in val_pbar:
                 data, target = data.to(device), target.to(device)
                 output = model(data)
-                loss = criterion(output, target)
+                # 25.07.15 - 추가 column 2개(cycle_idx, progress_ratio)를 제거한 model output과 target을 맞춰줌
+                loss = criterion(output, target[:, :, :-2])
                 val_loss += loss.item()
                 val_pbar.set_postfix({'Loss': f'{loss.item():.6f}'})
         
@@ -221,6 +233,8 @@ if __name__ == "__main__":
         train_improved_model("gru")
     elif choice == "3":
         train_improved_model("seq2seq")
+    elif choice == "4":
+        train_improved_model("bi_lstm")
     else:
         print("잘못된 선택입니다. 기본값으로 개선된 LSTM 모델 학습을 실행합니다.")
         train_improved_model("lstm") 

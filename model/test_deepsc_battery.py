@@ -14,7 +14,7 @@ import pdb
 
 loss_type = 'MSE' # 3 loss 테스트 중 제일 좋았음
 model_type = 'LSTM'
-channel_type = 'Rician'
+channel_type = 'no_channel'
 
 def create_model(model_type, input_dim, window_size, device):
     """모델 타입에 따라 적절한 모델을 생성하는 함수"""
@@ -44,7 +44,7 @@ def create_model(model_type, input_dim, window_size, device):
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/lstm/lstm_deepsc_battery_epoch63.pth'
+        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/lstm/lstm_deepsc_battery_epoch21.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
@@ -299,12 +299,12 @@ def reconstruct_battery_series(model_type="deepsc"):
     # train_len = len(train_data.tensors[0])
 
     # 데이터 및 메타 정보 로드
-    test_data = torch.load('model/preprocessed_data_by_cycle/test_data.pt')
+    test_data = torch.load('model/preprocessed_data_anomaly_eliminated/test_data.pt')
     test_tensor = test_data.tensors[0]
-    scaler = joblib.load('model/preprocessed_data_by_cycle/scaler.pkl')
-    with open('model/preprocessed_data_by_cycle/window_meta.pkl', 'rb') as f:
+    scaler = joblib.load('model/preprocessed_data_anomaly_eliminated/scaler.pkl')
+    with open('model/preprocessed_data_anomaly_eliminated/window_meta.pkl', 'rb') as f:
         window_meta = pickle.load(f)
-    train_data = torch.load('model/preprocessed_data_by_cycle/train_data.pt')
+    train_data = torch.load('model/preprocessed_data_anomaly_eliminated/train_data.pt')
     # train_tensor = train_tensor.tensors[0]
     train_len = len(train_data.tensors[0])
 
@@ -328,7 +328,7 @@ def reconstruct_battery_series(model_type="deepsc"):
     battery_files = sorted(set([meta['file'] for meta in window_meta]))
     battery_lengths = {}
     for fname in battery_files:
-        df = pd.read_csv(os.path.join('data_handling/merged', fname))
+        df = pd.read_csv(os.path.join('data_handling/merged_anomaly_eliminated', fname))
         battery_lengths[fname] = len(df)
 
     # 2. 배터리별로 빈 시계열 배열 준비 (복원값, 카운트)

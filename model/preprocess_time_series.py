@@ -7,6 +7,10 @@ from tqdm import tqdm
 from torch.utils.data import TensorDataset
 import joblib
 import pickle
+import pdb
+
+window_size_arr = [16, 32, 64, 128]
+window_size = window_size_arr[1]
 
 def is_valid_csv(fpath, expected_columns):
     try:
@@ -14,6 +18,27 @@ def is_valid_csv(fpath, expected_columns):
         return all(col in df.columns for col in expected_columns)
     except:
         return False
+
+def correct_outliers_with_interpolation(df, feature_cols):
+    df = df.copy()
+    for col in feature_cols:
+        series = df[col]
+        Q1 = series.quantile(0.25)
+        Q3 = series.quantile(0.75)
+        IQR = Q3 - Q1
+        lower = Q1 - 1.5 * IQR
+        upper = Q3 + 1.5 * IQR
+        # 이상치 마스킹
+        outlier_mask = (series < lower) | (series > upper)
+        if outlier_mask.any():
+            # 이상치 위치를 NaN으로
+            series[outlier_mask] = np.nan
+            # 선형 보간
+            series = series.interpolate(method='linear', limit_direction='both')
+            # 남은 NaN은 앞뒤 값으로 채움
+            series = series.fillna(method='bfill').fillna(method='ffill')
+            df[col] = series
+    return df
 
 def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8, save_split_path=None, split_ratio=0.8, window_size=128, stride=64, cycle_col='cycle_idx'):
     files = sorted([f for f in os.listdir(folder_path) if f.endswith('.csv')])
@@ -29,6 +54,8 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
             continue
         try:
             df = pd.read_csv(fpath)
+            # 이상치 보정
+            df = correct_outliers_with_interpolation(df, feature_cols)
             data = df[feature_cols].values.astype(np.float32)
             cycles = df[cycle_col].values.astype(np.int32)
             all_data.append(data)
@@ -39,6 +66,8 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
 
     print(f"Valid CSV files loaded: {valid_files} / {total_files}")
 
+    pdb.set_trace()
+
     if not all_data:
         print("[ERROR] No valid data found.")
         return
@@ -48,6 +77,8 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
     combined_data = np.vstack(all_data)  # 모든 데이터를 세로로 합침
     scaler = MinMaxScaler()
     scaled_combined = scaler.fit_transform(combined_data)
+
+    pdb.set_trace()
 
     # 3단계: cycle별로 파일 분리 및 window 생성
     all_windows = []
@@ -78,6 +109,8 @@ def load_all_valid_csv_tensors_by_cycle(folder_path, feature_cols, batch_size=8,
 
     # 텐서로 변환
     full_tensor = torch.stack(all_windows, dim=0)  # [Total_N, window, D+2]
+
+    pdb.set_trace()
 
     if save_split_path:
         N = full_tensor.shape[0]
@@ -115,12 +148,13 @@ if __name__ == '__main__':
     feature_cols = [
         'Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time'
     ]
+    
     load_all_valid_csv_tensors_by_cycle(
         folder_path="data_handling/merged",
         feature_cols=feature_cols,
         batch_size=8,
-        save_split_path="./model/preprocessed_data_by_cycle",
+        save_split_path="./model/preprocessed_data_anomaly_eliminated",
         split_ratio=0.8,
-        window_size=64,
-        stride=32,
+        window_size=window_size,
+        stride=window_size//2,
     )
