@@ -8,11 +8,11 @@ from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pdb
 
 def train_deepsc_battery(
-    train_pt='model/preprocessed_data/train_data.pt',
-    test_pt='model/preprocessed_data/test_data.pt',
-    scaler_path='model/preprocessed_data/scaler.pkl',
-    model_save_path='checkpoints/channel_case/Rician/deepsc_battery_epoch',
-    # model_save_path='checkpoints/firstcase/MSE/deepsc_battery_epoch',
+    train_pt='model/preprocessed_data_0715/train_data.pt',
+    test_pt='model/preprocessed_data_0715/test_data.pt',
+    scaler_path='model/preprocessed_data_0715/scaler.pkl',
+    # model_save_path='checkpoints/channel_case/Rician/deepsc_battery_epoch',
+    model_save_path='checkpoints/case3/MSE/deepsc_battery_epoch',
     num_epochs=80,
     batch_size=32,
     lr=1e-5,
@@ -52,8 +52,6 @@ def train_deepsc_battery(
     # criterion = nn.HuberLoss()
     optimizer = optim.Adam(model.parameters(), lr=lr)
     scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=10, verbose=True)
-
-    pdb.set_trace()
 
     # val loss initial value 정의
     best_val_loss = 1

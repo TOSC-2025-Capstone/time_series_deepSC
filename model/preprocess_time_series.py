@@ -144,11 +144,11 @@ if __name__ == '__main__':
     ]
     
     load_all_valid_csv_tensors_by_cycle(
-        folder_path="data_handling/merged",
+        folder_path="data_handling/yujin_files",
         feature_cols=feature_cols,
         batch_size=8,
         # save_split_path="./model/preprocessed_data_anomaly_eliminated",
-        save_split_path="./model/preprocessed_data_128",
+        save_split_path="./model/preprocessed_data_test1",
         split_ratio=0.8,
         window_size=window_size,
         stride=window_size//4,

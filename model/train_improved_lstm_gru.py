@@ -28,8 +28,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     print("1. 데이터 로드 중...")
     # train_data = torch.load('model/preprocessed_data_anomaly_eliminated_1/train_data.pt')
     # val_data = torch.load('model/preprocessed_data_anomaly_eliminated_1/test_data.pt')
-    train_data = torch.load('model/preprocessed_data_128/train_data.pt')
-    val_data = torch.load('model/preprocessed_data_128/test_data.pt')
+    train_data = torch.load('model/preprocessed_data_0715/train_data.pt')
+    val_data = torch.load('model/preprocessed_data_0715/test_data.pt')
     
     train_tensor = train_data.tensors[0]
     val_tensor = val_data.tensors[0]
