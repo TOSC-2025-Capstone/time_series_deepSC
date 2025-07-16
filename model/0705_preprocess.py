@@ -8,6 +8,7 @@ from torch.utils.data import TensorDataset
 import joblib
 import pickle
 import matplotlib.pyplot as plt
+import pdb
 
 plt.rcParams['font.family'] = 'Malgun Gothic'  # Windows
 # plt.rcParams['font.family'] = 'AppleGothic'  # Mac
@@ -98,7 +99,7 @@ def load_all_valid_csv_tensors(folder_path, feature_cols, batch_size=8, save_spl
         sample_restored = scaler.inverse_transform(sample_scaled)
         feature_names = feature_cols
         # verify_scaling(sample_original, sample_scaled, sample_restored, feature_names)
-        plot_scaling_comparison(sample_original, sample_scaled, sample_restored, feature_names, sample_num=sample_num)
+        plot_scaling_comparison(sample_original, sample_scaled, feature_names, sample_num)
 
 def verify_scaling(original_data, scaled_data, restored_data, feature_names):
     for i, feature in enumerate(feature_names):
@@ -121,7 +122,6 @@ def plot_scaling_comparison(original_data, scaled_data, feature_names, sample_nu
     for i, feature in enumerate(feature_names):
         plt.subplot(n_rows, n_cols, i + 1)
         # 데이터가 너무 많으면 앞부분만 표시
-        pdb.set_trace()
         orig = original_data[:sample_num, i]
         scaled = scaled_data[:sample_num, i]
         plt.plot(orig, label='Original', alpha=0.7)
@@ -139,10 +139,10 @@ if __name__ == '__main__':
     ]
 
     load_all_valid_csv_tensors(
-        folder_path="data_handling/merged",
+        folder_path="data_handling/merged_anomaly_eliminated_z",
         feature_cols=feature_cols,
         batch_size=8,
-        save_split_path="./model/preprocessed_data_0715_2",
+        save_split_path="./model/preprocessed_data_0715_outlier_cut",
         split_ratio=0.8,
         window_size=128,
         stride=32,

@@ -1,3 +1,12 @@
 250619 : 기본값
 250621 : train, test file 생성 및 csv 복원을 위해서 전처리 window 매핑 기록을 추가로 pt 저장
  + csv 단위까지의 복원 진행
+
+
+## model checkpoint versions
+checkpoint_dir = f'checkpoints/case index/MSE/{model_type}/{model_type}_deepsc_battery'
+
+# case index
+no-channel : 채널 없이 테스트했던 케이스들
+case 3 : default(merged) 대상 전처리 후 재검증 
+case 4 : merged 대신 merged_anomaly_eliminated_z를 대상으로 전처리 후 검증

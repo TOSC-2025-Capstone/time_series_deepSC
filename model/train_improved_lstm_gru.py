@@ -28,8 +28,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     print("1. 데이터 로드 중...")
     # train_data = torch.load('model/preprocessed_data_anomaly_eliminated_1/train_data.pt')
     # val_data = torch.load('model/preprocessed_data_anomaly_eliminated_1/test_data.pt')
-    train_data = torch.load('model/preprocessed_data_0715/train_data.pt')
-    val_data = torch.load('model/preprocessed_data_0715/test_data.pt')
+    train_data = torch.load('model/preprocessed_data_0715_outlier_cut/train_data.pt')
+    val_data = torch.load('model/preprocessed_data_0715_outlier_cut/test_data.pt')
     
     train_tensor = train_data.tensors[0]
     val_tensor = val_data.tensors[0]
@@ -114,7 +114,7 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     pdb.set_trace()
 
     # 5. 체크포인트 저장 디렉토리 생성
-    checkpoint_dir = f'checkpoints/case3/MSE/{model_type}/{model_type}_deepsc_battery'
+    checkpoint_dir = f'checkpoints/case4/MSE/{model_type}/{model_type}_deepsc_battery'
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # 6. 학습 기록
