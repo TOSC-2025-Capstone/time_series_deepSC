@@ -302,7 +302,6 @@ def reconstruct_battery_series(model_type="deepsc"):
     print(f"=== {model_type.upper()} 기반 전체 배터리 시계열 복원 시작 ===")
     
     save_dir = f'reconstructed_{channel_type}_{model_type}_{loss_type}'
-    # save_dir = f'reconstructed_{model_type}_{loss_type}'
 
     # 데이터 및 메타 정보 로드
     test_data = torch.load('model/preprocessed_data_0715/test_data.pt')
@@ -311,20 +310,7 @@ def reconstruct_battery_series(model_type="deepsc"):
     with open('model/preprocessed_data_0715/window_meta.pkl', 'rb') as f:
         window_meta = pickle.load(f)
     train_data = torch.load('model/preprocessed_data_0715/train_data.pt')
-    # train_tensor = train_tensor.tensors[0]
     train_len = len(train_data.tensors[0])
-
-    # pdb.set_trace()
-
-    # # 데이터 및 메타 정보 로드
-    # test_data = torch.load('model/preprocessed_data_test1/test_data.pt')
-    # test_tensor = test_data.tensors[0]
-    # scaler = joblib.load('model/preprocessed_data_test1/scaler.pkl')
-    # with open('model/preprocessed_data_test1/window_meta.pkl', 'rb') as f:
-    #     window_meta = pickle.load(f)
-    # train_data = torch.load('model/preprocessed_data_test1/train_data.pt')
-    # # train_tensor = train_tensor.tensors[0]
-    # train_len = len(train_data.tensors[0])
 
     # 모델 로드
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -346,64 +332,46 @@ def reconstruct_battery_series(model_type="deepsc"):
     battery_files = sorted(set([meta['file'] for meta in window_meta]))
     battery_lengths = {}
     for fname in battery_files:
-        # df = pd.read_csv(os.path.join('data_handling/merged_anomaly_eliminated', fname))
         df = pd.read_csv(os.path.join('data_handling/merged_preprocessed', fname))
         battery_lengths[fname] = len(df)
 
-    # 2. 배터리별로 빈 시계열 배열 준비 (복원값, 카운트)
-    # input-2 => cycle_idx, progress_ratio column 제외
-    # reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim-2)) for fname in battery_files}
+    # 2. 배터리별로 빈 시계열 배열 준비 (정규화된 값으로)
     reconstructed = {fname: np.zeros((battery_lengths[fname], input_dim)) for fname in battery_files}
     counts = {fname: np.zeros(battery_lengths[fname]) for fname in battery_files}
 
-    # 3. 각 window 복원 및 배터리별 시계열에 합치기 (디버깅 정보 포함)
+    # 3. 각 window 복원 및 배터리별 시계열에 합치기 (정규화된 값으로)
     with torch.no_grad():
         for i in tqdm(range(test_tensor.shape[0]), desc="Reconstructing"):
             input_data = test_tensor[i].unsqueeze(0).to(device)
             output = model(input_data)
-            output_np = output.squeeze(0).cpu().numpy()  # (window, 8)  # 8 = 6 features + cycle_idx + progress_ratio
-            # output_main = output_np[:, :6]  # 앞의 6개 feature만 추출
-            # output_rest = output_np[:, 6:]  # cycle_idx, progress_ratio
+            output_np = output.squeeze(0).cpu().numpy()  # (window, feature)
 
-            # scaler로 역변환
-            # output_main_inv = scaler.inverse_transform(output_main)  # (window, 6)
-            output_main_inv = scaler.inverse_transform(output_np)  # (window, 6)
-
-            # 필요하다면 다시 붙이기
-            # output_inv_full = np.concatenate([output_main_inv, output_rest], axis=1)
-            
-            # test_data index 결정
             meta = window_meta[train_len + i]  # test set은 train 다음부터 시작
-            # meta = window_meta[i]  # train set은 0부터 시작
             fname = meta['file']
             start = meta['start']
-            end = start + window_size
-            print(f"복원 window {i}: {fname} {start}-{end}, output mean={output_main_inv.mean():.4f}")
-            
-            # 실제 남은 길이 계산
             actual_len = min(window_size, battery_lengths[fname] - start)
-            reconstructed[fname][start:start+actual_len] += output_main_inv[:actual_len]
+            # 정규화된 값으로 합치기
+            reconstructed[fname][start:start+actual_len] += output_np[:actual_len]
             counts[fname][start:start+actual_len] += 1
 
-    # 4. 겹치는 부분 평균내기
+    # 4. 겹치는 부분 평균내기 (정규화된 값)
     for fname in battery_files:
         mask = counts[fname] > 0
         reconstructed[fname][mask] /= counts[fname][mask][:, None]
 
-     # 5. 배터리별로 csv 저장 및 비교 시각화
+    # 5. 평균낸 후 역정규화 및 저장/시각화
     os.makedirs(save_dir, exist_ok=True)
     for fname in battery_files:
         base = os.path.splitext(fname)[0]
-        df_recon = pd.DataFrame(reconstructed[fname], columns=feature_cols)
+        # === 여기서 역정규화 ===
+        recon_inv = scaler.inverse_transform(reconstructed[fname])
+        df_recon = pd.DataFrame(recon_inv, columns=feature_cols)
         csv_path = os.path.join(save_dir, f'{base}_reconstructed.csv')
         df_recon.to_csv(csv_path, index=False)
         print(f"복원된 전체 시계열 저장: {csv_path}")
-        # pdb.set_trace()
 
         # 비교 시각화 (test set에 포함된 배터리만)
         if np.any(counts[fname] > 0):
-            # 비교 원본 경로
-            # df_orig = pd.read_csv(os.path.join('data_handling/merged', fname))
             df_orig = pd.read_csv(os.path.join('data_handling/merged_preprocessed', fname))
             plt.figure(figsize=(15, 10))
             for i, col in enumerate(feature_cols):
