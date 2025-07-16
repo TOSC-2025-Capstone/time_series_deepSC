@@ -13,8 +13,10 @@ from collections import defaultdict
 import pdb
 
 loss_type = 'MSE' # 3 loss 테스트 중 제일 좋았음
-model_type = 'at_LSTM'
+model_type = 'LSTM'
 channel_type = 'no_channel'
+
+csv_origin_path = 'data_handling/merged'
 
 def create_model(model_type, input_dim, window_size, device):
     """모델 타입에 따라 적절한 모델을 생성하는 함수"""
@@ -30,8 +32,7 @@ def create_model(model_type, input_dim, window_size, device):
             dropout=0.1,
             compressed_len=64
         ).to(device)
-        # checkpoint_path = f'checkpoints/firstcase/{loss_type}/deepsc_battery_epoch79.pth'
-        checkpoint_path = f'checkpoints/case3/MSE/deepsc_battery_epoch8.pth'
+        checkpoint_path = f'checkpoints/case3/{loss_type}/{model_type}/deepsc_battery_epoch14.pth'
         
     elif model_type == "lstm":
         # LSTM 기반 모델
@@ -39,14 +40,14 @@ def create_model(model_type, input_dim, window_size, device):
             input_dim=input_dim,
             # target_len=window_size//2, 
             # target_features=input_dim//2, 
-            target_len=window_size, 
-            target_features=input_dim, 
+            target_len=window_size//2, 
+            target_features=input_dim//2, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=2,
             dropout=0.1
         ).to(device)
-        checkpoint_path = 'checkpoints/cycle_separate_case/MSE/lstm/lstm_deepsc_battery_epoch1.pth'
+        checkpoint_path = f'checkpoints/case3/MSE/lstm/lstm_deepsc_battery/lstm_deepsc_battery_epoch74.pth'
         
     elif model_type == "gru":
         # GRU 기반 모델
@@ -328,11 +329,11 @@ def reconstruct_battery_series(model_type="deepsc"):
 
     feature_cols = ['Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time']
 
-    # 1. 배터리별로 시계열 길이 추정 (원본 csv에서)
+    # 1. 배터리별로 시계열 길이 추정 (원본 csv 불러와서 추정)
     battery_files = sorted(set([meta['file'] for meta in window_meta]))
     battery_lengths = {}
     for fname in battery_files:
-        df = pd.read_csv(os.path.join('data_handling/merged_preprocessed', fname))
+        df = pd.read_csv(os.path.join(csv_origin_path, fname))
         battery_lengths[fname] = len(df)
 
     # 2. 배터리별로 빈 시계열 배열 준비 (정규화된 값으로)
@@ -363,6 +364,7 @@ def reconstruct_battery_series(model_type="deepsc"):
     os.makedirs(save_dir, exist_ok=True)
     for fname in battery_files:
         base = os.path.splitext(fname)[0]
+
         # === 여기서 역정규화 ===
         recon_inv = scaler.inverse_transform(reconstructed[fname])
         df_recon = pd.DataFrame(recon_inv, columns=feature_cols)
@@ -372,7 +374,7 @@ def reconstruct_battery_series(model_type="deepsc"):
 
         # 비교 시각화 (test set에 포함된 배터리만)
         if np.any(counts[fname] > 0):
-            df_orig = pd.read_csv(os.path.join('data_handling/merged_preprocessed', fname))
+            df_orig = pd.read_csv(os.path.join(csv_origin_path, fname))
             plt.figure(figsize=(15, 10))
             for i, col in enumerate(feature_cols):
                 plt.subplot(2, 3, i+1)

@@ -7,6 +7,14 @@ from tqdm import tqdm
 from torch.utils.data import TensorDataset
 import joblib
 import pickle
+import matplotlib.pyplot as plt
+
+plt.rcParams['font.family'] = 'Malgun Gothic'  # Windows
+# plt.rcParams['font.family'] = 'AppleGothic'  # Mac
+# plt.rcParams['font.family'] = 'NanumGothic'  # Linux
+
+# 마이너스 깨짐 방지
+plt.rcParams['axes.unicode_minus'] = False
 
 def is_valid_csv(fpath, expected_columns):
     try:
@@ -84,11 +92,13 @@ def load_all_valid_csv_tensors(folder_path, feature_cols, batch_size=8, save_spl
 
         # 스케일링 검증
         print("\n=== 스케일링 검증 ===")
-        sample_original = combined_data[:100]  # 처음 100개 샘플
-        sample_scaled = scaled_combined[:100]
+        sample_num = 1000
+        sample_original = combined_data[:sample_num]  # 처음 1000개 샘플
+        sample_scaled = scaled_combined[:sample_num]
         sample_restored = scaler.inverse_transform(sample_scaled)
         feature_names = feature_cols
-        verify_scaling(sample_original, sample_scaled, sample_restored, feature_names)
+        # verify_scaling(sample_original, sample_scaled, sample_restored, feature_names)
+        plot_scaling_comparison(sample_original, sample_scaled, sample_restored, feature_names, sample_num=sample_num)
 
 def verify_scaling(original_data, scaled_data, restored_data, feature_names):
     for i, feature in enumerate(feature_names):
@@ -98,16 +108,41 @@ def verify_scaling(original_data, scaled_data, restored_data, feature_names):
         print(f"복원 범위: {restored_data[:, i].min():.3f} ~ {restored_data[:, i].max():.3f}")
         print(f"MSE: {np.mean((original_data[:, i] - restored_data[:, i])**2):.6f}")
 
+def plot_scaling_comparison(original_data, scaled_data, feature_names, sample_num=1000):
+    """
+    feature별로 전처리 전/후 데이터를 한 plot에 비교해서 그려줍니다.
+    sample_num: 너무 데이터가 많을 때 앞에서부터 몇 개만 그릴지 지정 (기본 1000)
+    """
+    n_features = len(feature_names)
+    n_cols = 3
+    n_rows = int(np.ceil(n_features / n_cols))
+    plt.figure(figsize=(5 * n_cols, 4 * n_rows))
+
+    for i, feature in enumerate(feature_names):
+        plt.subplot(n_rows, n_cols, i + 1)
+        # 데이터가 너무 많으면 앞부분만 표시
+        pdb.set_trace()
+        orig = original_data[:sample_num, i]
+        scaled = scaled_data[:sample_num, i]
+        plt.plot(orig, label='Original', alpha=0.7)
+        plt.plot(scaled, label='Scaled', alpha=0.7)
+        plt.title(feature)
+        plt.legend()
+        plt.grid(True)
+    plt.tight_layout()
+    plt.suptitle("Feature별 전처리 전/후 비교", y=1.02, fontsize=16)
+    plt.show()
+
 if __name__ == '__main__':
     feature_cols = [
         'Voltage_measured', 'Current_measured', 'Temperature_measured', 'Current_load', 'Voltage_load', 'Time'
     ]
 
     load_all_valid_csv_tensors(
-        folder_path="data_handling/merged_preprocessed",
+        folder_path="data_handling/merged",
         feature_cols=feature_cols,
         batch_size=8,
-        save_split_path="./model/preprocessed_data_0715",
+        save_split_path="./model/preprocessed_data_0715_2",
         split_ratio=0.8,
         window_size=128,
         stride=32,

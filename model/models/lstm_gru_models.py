@@ -166,7 +166,7 @@ class LSTMDeepSC(nn.Module):
         )
         # compressed_features, hidden_dim, target_len=128, target_features=6, num_layers=2, dropout=0.1
         self.decoder = LSTMDecompressor_Both(
-            target_features, hidden_dim, seq_len, input_dim-2, num_layers, dropout
+            target_features, hidden_dim, seq_len, input_dim, num_layers, dropout
         )
         
     def forward(self, x):

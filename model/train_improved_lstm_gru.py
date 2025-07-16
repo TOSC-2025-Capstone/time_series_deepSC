@@ -58,8 +58,8 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
             input_dim=input_dim,
             # target_len=window_size//2, 
             # target_features=input_dim//2-1, 
-            target_len=window_size, 
-            target_features=input_dim-2, 
+            target_len=window_size//2, 
+            target_features=input_dim//2, 
             seq_len=window_size,
             hidden_dim=128,
             num_layers=2,
@@ -114,7 +114,7 @@ def train_improved_model(model_type, num_epochs=80, batch_size=32, learning_rate
     pdb.set_trace()
 
     # 5. 체크포인트 저장 디렉토리 생성
-    checkpoint_dir = f'checkpoints/cycle_separate_case/MSE/{model_type}/{model_type}_deepsc_battery'
+    checkpoint_dir = f'checkpoints/case3/MSE/{model_type}/{model_type}_deepsc_battery'
     os.makedirs(checkpoint_dir, exist_ok=True)
     
     # 6. 학습 기록

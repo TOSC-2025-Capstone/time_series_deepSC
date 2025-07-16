@@ -6,13 +6,15 @@ import joblib
 from models.transceiver import DeepSC
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import pdb
+from tqdm import tqdm
+import matplotlib.pyplot as plt 
 
 def train_deepsc_battery(
     train_pt='model/preprocessed_data_0715/train_data.pt',
     test_pt='model/preprocessed_data_0715/test_data.pt',
     scaler_path='model/preprocessed_data_0715/scaler.pkl',
     # model_save_path='checkpoints/channel_case/Rician/deepsc_battery_epoch',
-    model_save_path='checkpoints/case3/MSE/deepsc_battery_epoch',
+    model_save_path='checkpoints/case3/MSE/deepsc/deepsc_battery_epoch',
     num_epochs=80,
     batch_size=32,
     lr=1e-5,
@@ -56,14 +58,12 @@ def train_deepsc_battery(
     # val loss initial value 정의
     best_val_loss = 1
 
-    # # early stopping
-    # best_epoch_idx = 0
-
     # 학습 루프
     for epoch in range(num_epochs):
         model.train()
         total_loss = 0
-        for batch in train_loader:
+        train_pbar = tqdm(train_loader, desc=f'Epoch {epoch+1}/{num_epochs} [DeepSC-Train]')
+        for batch in train_pbar:
             batch = batch.to(device)
             optimizer.zero_grad()
             output = model(batch)
@@ -73,6 +73,25 @@ def train_deepsc_battery(
             total_loss += loss.item() * batch.size(0)
         avg_loss = total_loss / len(train_loader.dataset)
         print(f"[Epoch {epoch+1}/{num_epochs}] Train Loss: {avg_loss:.6f}")
+
+        # === 정규화된 입력과 output 비교 plot (첫 배치만) ===
+        if epoch == 10:
+            # batch: [batch_size, window, feature]
+            input_norm = batch[:6, :, :6].detach().cpu().numpy()   # [6, window, 6]
+            output_norm = output[:6, :, :6].detach().cpu().numpy() # [6, window, 6]
+            for sample_idx in range(6):
+                plt.figure(figsize=(15, 8))
+                for i in range(input_norm.shape[2]):
+                    plt.subplot(2, 3, i+1)
+                    plt.plot(input_norm[sample_idx, :, i], label='Input (norm)', color='blue', alpha=0.7)
+                    plt.plot(output_norm[sample_idx, :, i], label='Output (norm)', color='orange', alpha=0.7)
+                    plt.title(f'Feature {i+1}')
+                    plt.legend()
+                    plt.grid(True)
+                plt.suptitle(f'정규화 입력 vs Output (Epoch {epoch+1}, Sample {sample_idx+1})')
+                plt.tight_layout()
+                plt.savefig(f'model/train_input_vs_output_norm_epoch{epoch+1}_sample{sample_idx+1}.png', dpi=200)
+                plt.show()
 
         # 검증
         model.eval()
